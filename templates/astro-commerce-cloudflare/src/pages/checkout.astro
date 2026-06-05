@@ -1,0 +1,99 @@
+---
+import CheckoutForm from '@/components/CheckoutForm';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getProduct, getCommerceConfigFromServer } from '@/lib/commerce';
+import { getCommerceConfig, getSiteConfig } from '@/lib/config';
+
+export const prerender = false;
+
+const slug = Astro.url.searchParams.get('slug') || '';
+const sku = Astro.url.searchParams.get('sku') || '';
+const quantity = Math.max(1, Number(Astro.url.searchParams.get('quantity') || '1'));
+const site = getSiteConfig();
+const { mapboxAccessToken } = getCommerceConfig();
+
+let paypalClientId = '';
+let paypalCardEnabled = false;
+let stripePublishableKey = '';
+let paymentConfigError = '';
+let product = null;
+let variant = null;
+let loadError = '';
+
+try {
+  const config = await getCommerceConfigFromServer();
+  const paypalConfig = config.payments.paypal;
+  const stripeConfig = config.payments.stripe;
+
+  if (paypalConfig.enabled && paypalConfig.clientId) {
+    paypalClientId = paypalConfig.clientId;
+    paypalCardEnabled = Boolean(
+      paypalConfig.creditCardEnabled ??
+        paypalConfig.cardEnabled ??
+        paypalConfig.card?.enabled,
+    );
+  }
+
+  if (stripeConfig?.enabled && stripeConfig.publishableKey) {
+    stripePublishableKey = stripeConfig.publishableKey;
+  }
+
+  if (!paypalClientId && !stripePublishableKey) {
+    paymentConfigError = 'No enabled payment method is available in /api/commerce/config.';
+  }
+} catch (error) {
+  console.error('Failed to fetch server commerce config:', error);
+  paymentConfigError = error instanceof Error ? error.message : 'Unable to load /api/commerce/config.';
+}
+
+if (!slug || !sku || !Number.isInteger(quantity)) {
+  loadError = 'Missing or invalid checkout selection.';
+} else {
+  try {
+    product = await getProduct(slug);
+    variant = product.variants.find((item) => item.sku === sku) ?? null;
+    if (!variant) {
+      loadError = `SKU "${sku}" is not available for this product.`;
+    }
+  } catch (error) {
+    loadError = error instanceof Error ? error.message : 'Unable to load checkout.';
+  }
+}
+---
+
+<BaseLayout
+  checkoutOnly
+  title={`Secure Checkout | ${site.name}`}
+  description={`Begin your heart-warming journey with ${site.name}. Enjoy secure checkout with supported card and wallet payment options.`}
+>
+  {
+    product && variant ? (
+      <section class="section checkout-page">
+        <div class="container">
+          <CheckoutForm
+            product={product}
+            variant={variant}
+            quantity={quantity}
+            paypalClientId={paypalClientId}
+            paypalCardEnabled={paypalCardEnabled}
+            stripePublishableKey={stripePublishableKey}
+            paymentConfigError={paymentConfigError}
+            mapboxAccessToken={mapboxAccessToken}
+            siteName={site.name}
+            client:only="react"
+          />
+        </div>
+      </section>
+    ) : (
+      <section class="error-state">
+        <div class="panel error-panel max-w-2xl text-center">
+          <p class="eyebrow">Checkout Unavailable</p>
+          <h1>Please select a valid product variant before checkout.</h1>
+          <p>{loadError}</p>
+          {product && sku ? <p>Selected SKU: {sku}</p> : null}
+          <a class="primary-button" href="/">Return to Store</a>
+        </div>
+      </section>
+    )
+  }
+</BaseLayout>

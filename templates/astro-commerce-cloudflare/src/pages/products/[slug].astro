@@ -1,0 +1,289 @@
+---
+import { createMarkdownProcessor } from "@astrojs/markdown-remark";
+import ProductPurchasePanel from "@/components/ProductPurchasePanel";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { getProduct, getProducts } from "@/lib/commerce";
+import {
+  IMAGE_PRESETS,
+  formatMoney,
+  imageSrcSet,
+  optimizedImageUrl,
+  productCardPrice,
+  productImages,
+  productTrustSignals,
+  stripFrontmatter,
+} from "@/lib/format";
+import { getSiteConfig } from "@/lib/config";
+import type { Product } from "@/lib/types";
+
+export const prerender = false;
+
+const site = getSiteConfig();
+const slug = String(Astro.params.slug ?? "");
+let product: Product | null = null;
+let relatedProducts: Product[] = [];
+let loadError = "";
+
+try {
+  product = slug ? await getProduct(slug) : null;
+  if (!product) {
+    loadError = "Missing product slug.";
+  } else {
+    const products = await getProducts(8);
+    relatedProducts = products
+      .filter((item) => item.slug !== product?.slug)
+      .slice(0, 4);
+  }
+} catch (error) {
+  loadError =
+    error instanceof Error ? error.message : "Unable to load product.";
+}
+
+const images = product ? productImages(product) : [];
+const sellingPoints = product?.sellingPoints ?? [];
+const attributes = Object.entries(product?.attributes ?? {});
+const description =
+  product?.description ||
+  (product?.content ? stripFrontmatter(product.content) : "");
+const descriptionHtml = description
+  ? await renderProductMarkdown(description)
+  : "";
+const optionNames = product
+  ? Array.from(
+      new Set(
+        product.variants.flatMap((variant) =>
+          Object.keys(variant.optionValues),
+        ),
+      ),
+    )
+  : [];
+const lowestVariant = product?.variants.reduce(
+  (lowest, variant) => (variant.price < lowest.price ? variant : lowest),
+  product.variants[0],
+);
+const schema =
+  product && lowestVariant
+    ? {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        name: product.title,
+        image: images,
+        description: description || sellingPoints[0] || product.title,
+        sku: lowestVariant.sku,
+        offers: {
+          "@type": "Offer",
+          priceCurrency: product.currency,
+          price:
+            product.currency === "JPY"
+              ? lowestVariant.price
+              : lowestVariant.price / 100,
+          availability:
+            product.totalStock > 0
+              ? "https://schema.org/InStock"
+              : "https://schema.org/OutOfStock",
+        },
+      }
+    : null;
+
+function normalizeMarkdownImages() {
+  return (tree: any) => {
+    walkMarkdownTree(tree, (node) => {
+      if (node.type === "image" && typeof node.url === "string") {
+        node.url = optimizedImageUrl(node.url, IMAGE_PRESETS.markdown);
+        node.data = {
+          ...node.data,
+          hProperties: {
+            ...node.data?.hProperties,
+            loading: "lazy",
+            decoding: "async",
+            fetchpriority: "low",
+          },
+        };
+      }
+    });
+  };
+}
+
+function walkMarkdownTree(node: any, visitor: (node: any) => void) {
+  visitor(node);
+
+  if (Array.isArray(node.children)) {
+    for (const child of node.children) {
+      walkMarkdownTree(child, visitor);
+    }
+  }
+}
+
+async function renderProductMarkdown(markdown: string) {
+  const processor = await createMarkdownProcessor({
+    syntaxHighlight: false,
+    remarkPlugins: [normalizeMarkdownImages],
+    remarkRehype: {
+      allowDangerousHtml: false,
+    },
+  });
+
+  const result = await processor.render(markdown);
+  return result.code;
+}
+---
+
+<BaseLayout
+  title={product ? `${product.title} | ${site.name}` : `Product Detail | ${site.name}`}
+  description={product
+    ? description || product.title
+    : `${site.name} product detail page.`}
+>
+  {
+    product ? (
+      <>
+        {schema ? (
+          <script
+            is:inline
+            type="application/ld+json"
+            set:html={JSON.stringify(schema)}
+          />
+        ) : null}
+
+        <ProductPurchasePanel product={product} client:load />
+
+        {description ||
+        attributes.length ||
+        optionNames.length ||
+        images.length ? (
+          <section class="section product-description-section">
+            <div class="container product-description-grid">
+              <article>
+                <p class="eyebrow">Description</p>
+                <h2>Product Details</h2>
+                {descriptionHtml ? (
+                  <div
+                    class="product-description-content"
+                    set:html={descriptionHtml}
+                  />
+                ) : (
+                  <p>
+                    No additional details are available for this product yet.
+                  </p>
+                )}
+              </article>
+              <article>
+                <p class="eyebrow">Specifications</p>
+                <h2>Product Attributes</h2>
+                <dl class="dl-list">
+                  {attributes.length ? (
+                    attributes.map(([key, value]) => (
+                      <div>
+                        <dt>{key}</dt>
+                        <dd>{value}</dd>
+                      </div>
+                    ))
+                  ) : (
+                    <>
+                      <div>
+                        <dt>Variant options</dt>
+                        <dd>
+                          {optionNames.length
+                            ? optionNames.join(", ")
+                            : `${product.variants.length} options available`}
+                        </dd>
+                      </div>
+                      {images.length ? (
+                        <div>
+                          <dt>Gallery</dt>
+                          <dd>{`${images.length} product image${images.length === 1 ? "" : "s"}`}</dd>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </dl>
+              </article>
+            </div>
+          </section>
+        ) : null}
+
+        {relatedProducts.length ? (
+          <section class="section-tight">
+            <div class="container section-header catalog-heading">
+              <div>
+                <p class="eyebrow">Keep Browsing</p>
+                <h2>You May Also Like</h2>
+              </div>
+              <p>Explore more curated creations from the {site.name} gallery.</p>
+            </div>
+            <div class="container grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-6">
+              {relatedProducts.map((item) => {
+                const image = productImages(item)[0];
+                const trust = productTrustSignals(item);
+                const price = productCardPrice(item);
+
+                return (
+                <a class="catalog-card" href={`/products/${item.slug}`}>
+                  <div class="media-frame catalog-card-art image-placeholder-frame">
+                    {image ? (
+                      <img
+                        src={optimizedImageUrl(image, IMAGE_PRESETS.card)}
+                        srcset={imageSrcSet(image, [360, 480, 720], { quality: IMAGE_PRESETS.card.quality })}
+                        sizes="(min-width: 640px) 280px, calc(100vw - 32px)"
+                        alt={item.title}
+                        loading="lazy"
+                        decoding="async"
+                        fetchpriority="low"
+                      />
+                    ) : (
+                      <span class="w-16 h-16 text-2xl" aria-hidden="true">
+                        {item.title.slice(0, 1).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div class="catalog-card-trust" aria-label={`${trust.rating} stars, ${trust.soldText}`}>
+                    <span aria-hidden="true">★★★★★</span>
+                    <strong>{trust.rating}</strong>
+                    <em>{trust.soldText}</em>
+                  </div>
+                  <div class="catalog-card-body grid gap-2">
+                    <h3>{item.title}</h3>
+                    {item.sellingPoints?.[0] ? <p>{item.sellingPoints[0]}</p> : null}
+                  </div>
+                  <div class="catalog-card-footer mt-auto pt-3 border-t border-line">
+                    <div class="catalog-price-stack">
+                      <strong>{formatMoney(price.price, item.currency)}</strong>
+                      {price.compareAtPrice ? (
+                        <span>
+                          <del>{formatMoney(price.compareAtPrice, item.currency)}</del>
+                          {price.discountPercent ? <em>{price.discountPercent}% off</em> : null}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </a>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+
+        <section class="product-page-footer-nav">
+          <div class="container product-breadcrumbs" aria-label="Breadcrumb">
+            <a href="/">Home</a>
+            <span>/</span>
+            <a href="/#products">Collections</a>
+            <span>/</span>
+            <strong>{product.title}</strong>
+          </div>
+        </section>
+      </>
+    ) : (
+      <section class="error-state">
+        <div class="panel error-panel max-w-2xl text-center">
+          <p class="eyebrow">Product unavailable</p>
+          <h1>We could not load this product.</h1>
+          <p>{loadError}</p>
+          <a class="primary-button" href="/">
+            Back to products
+          </a>
+        </div>
+      </section>
+    )
+  }
+</BaseLayout>

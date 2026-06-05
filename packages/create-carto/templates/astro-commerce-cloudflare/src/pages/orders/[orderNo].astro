@@ -1,0 +1,198 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getOrder } from '@/lib/commerce';
+import { getSiteConfig } from '@/lib/config';
+import { IMAGE_PRESETS, formatMoney, imagePlaceholderStyle, normalizeImageUrl, optimizedImageUrl } from '@/lib/format';
+
+export const prerender = false;
+
+const { orderNo } = Astro.params;
+const site = getSiteConfig();
+let order = null;
+let loadError = '';
+
+try {
+  order = orderNo ? await getOrder(orderNo) : null;
+  if (!order) {
+    loadError = 'Missing order number.';
+  }
+} catch (error) {
+  loadError = error instanceof Error ? error.message : 'Unable to load order.';
+}
+
+const paid = order?.paymentStatus === 'paid';
+const customerName = order ? `${order.customer.firstName} ${order.customer.lastName}`.trim() : '';
+const statusLabel = order ? order.status.charAt(0).toUpperCase() + order.status.slice(1) : '';
+const paymentLabel = order ? order.paymentStatus.charAt(0).toUpperCase() + order.paymentStatus.slice(1) : '';
+const orderItems = order
+  ? order.items.map((item) => ({
+      ...item,
+      imageUrl: item.image ? normalizeImageUrl(item.image) : '',
+    }))
+  : [];
+---
+
+<BaseLayout title={order ? `Order ${order.orderNo}` : 'Order status'} description="Order status and payment result.">
+  {
+    order ? (
+      <section class="section order-page">
+        <div class="container grid gap-7 order-result">
+          <div class={paid ? 'status-hero paid' : 'status-hero'}>
+            <div class="status-hero-copy">
+              <span class="status-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 6 9 17l-5-5"></path>
+                </svg>
+              </span>
+              <p class="eyebrow">{paid ? 'Payment complete' : 'Order status'}</p>
+              <h1>{paid ? 'Your order is confirmed.' : `Payment status: ${paymentLabel}`}</h1>
+              <p>
+                We are preparing your {site.name} order now. Keep <strong>{order.orderNo}</strong> handy for support and fulfillment updates.
+              </p>
+              <div class="status-actions flex flex-wrap gap-3 mt-7">
+                <a class="primary-button status-primary" href="/">Continue shopping</a>
+                <a class="secondary-button status-secondary" href="/#support">Contact support</a>
+              </div>
+            </div>
+            <div class="status-receipt" aria-label="Receipt snapshot">
+              <span>Order total</span>
+              <strong>{formatMoney(order.totalAmount, order.currency)}</strong>
+              <small>{order.itemCount} {order.itemCount === 1 ? 'item' : 'items'} · {paymentLabel}</small>
+            </div>
+          </div>
+
+          <div class="order-progress mt-6" aria-label="Order progress">
+            <div class="complete">
+              <span aria-hidden="true"></span>
+              <strong>Paid</strong>
+              <small>Payment captured</small>
+            </div>
+            <div class={order.status === 'processing' || order.status === 'done' ? 'complete' : ''}>
+              <span aria-hidden="true"></span>
+              <strong>Processing</strong>
+              <small>Preparing shipment</small>
+            </div>
+            <div class={order.status === 'done' ? 'complete' : ''}>
+              <span aria-hidden="true"></span>
+              <strong>Done</strong>
+              <small>Order fulfilled</small>
+            </div>
+          </div>
+
+          <div class="order-layout grid grid-cols-1 md:grid-cols-[1fr_0.72fr] gap-6">
+            <div class="order-card rounded-brand border border-line bg-white order-summary-card">
+              <div class="order-card-heading flex items-center justify-between gap-4 mb-5">
+                <div>
+                  <p class="eyebrow">Receipt</p>
+                  <h2>Order summary</h2>
+                </div>
+                <span class={paid ? 'status-pill paid' : 'status-pill'}>{paymentLabel}</span>
+              </div>
+            <dl>
+              <div>
+                <dt>Status</dt>
+                <dd>{statusLabel}</dd>
+              </div>
+              <div>
+                <dt>Payment</dt>
+                <dd>{paymentLabel}</dd>
+              </div>
+              <div>
+                <dt>Items</dt>
+                <dd>{order.itemCount}</dd>
+              </div>
+              <div>
+                <dt>Subtotal</dt>
+                <dd>{formatMoney(order.subtotalAmount, order.currency)}</dd>
+              </div>
+              <div>
+                <dt>Shipping</dt>
+                <dd>{formatMoney(order.shippingAmount, order.currency)}</dd>
+              </div>
+              <div>
+                <dt>Tax</dt>
+                <dd>{formatMoney(order.taxAmount, order.currency)}</dd>
+              </div>
+              <div class="summary-total-row">
+                <dt>Total</dt>
+                <dd>{formatMoney(order.totalAmount, order.currency)}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="order-card rounded-brand border border-line bg-white order-customer-card">
+            <div class="order-card-heading flex items-center justify-between gap-4 mb-5">
+              <div>
+                <p class="eyebrow">Details</p>
+                <h2>Delivery info</h2>
+              </div>
+            </div>
+            <dl>
+              <div>
+                <dt>Customer</dt>
+                <dd>{customerName}</dd>
+              </div>
+              <div>
+                <dt>Email</dt>
+                <dd>{order.customer.email}</dd>
+              </div>
+              <div>
+                <dt>Ship to</dt>
+                <dd>
+                  {order.shippingAddress.address1}
+                  {order.shippingAddress.address2 ? `, ${order.shippingAddress.address2}` : ''}<br />
+                  {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.postalCode}<br />
+                  {order.shippingAddress.country}
+                </dd>
+              </div>
+            </dl>
+          </div>
+          </div>
+
+          <div class="order-card rounded-brand border border-line bg-white items-card">
+            <div class="order-card-heading flex items-center justify-between gap-4 mb-5">
+              <div>
+                <p class="eyebrow">Box contents</p>
+                <h2>Items</h2>
+              </div>
+              <span class="text-muted font-bold">{order.items.length} {order.items.length === 1 ? 'line' : 'lines'}</span>
+            </div>
+            <div class="order-items grid gap-3.5">
+              {orderItems.map((item) => (
+                <article>
+                  <div class={item.imageUrl ? 'order-item-media image-placeholder-frame' : 'order-item-media'} style={imagePlaceholderStyle(item.imageUrl)}>
+                    {item.imageUrl ? (
+                      <img
+                        src={optimizedImageUrl(item.imageUrl, IMAGE_PRESETS.thumb)}
+                        alt={item.productTitle}
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    ) : <span aria-hidden="true">W</span>}
+                  </div>
+                  <div class="order-item-copy">
+                    <strong>{item.productTitle}</strong>
+                    <span>{item.sku}</span>
+                  </div>
+                  <div class="order-item-meta">
+                    <span>Qty {item.quantity}</span>
+                    <em>{formatMoney(item.lineTotal, order.currency)}</em>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+    ) : (
+      <section class="error-state">
+        <div class="panel error-panel max-w-2xl text-center">
+          <p class="eyebrow">Order unavailable</p>
+          <h1>We could not load this order.</h1>
+          <p>{loadError}</p>
+          <a class="primary-button" href="/">Return to product</a>
+        </div>
+      </section>
+    )
+  }
+</BaseLayout>

@@ -1,0 +1,85 @@
+---
+import PolicyPage from '@/components/PolicyPage.astro';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getSiteConfig } from '@/lib/config';
+
+const site = getSiteConfig();
+
+const contactMethods = [
+  { label: 'Customer support', value: site.supportEmail, href: `mailto:${site.supportEmail}` },
+  { label: 'Policies', value: 'Return policy', href: '/cancellation-refund-policy' },
+];
+
+const sections = [
+  {
+    title: 'Acceptance of Terms',
+    body: `By browsing this website, creating an order, or completing payment, you agree to these Terms and Conditions and any policies linked from checkout. This website is operated by ${site.legalName}.`,
+  },
+  {
+    title: 'Products and Availability',
+    items: [
+      'Product descriptions, prices, images, stock levels, and promotions may change without notice.',
+      'We work to keep product information accurate, but occasional errors may occur. We may cancel or correct orders affected by obvious pricing, inventory, or content mistakes.',
+      'Some products may be subject to regional restrictions, import duties, or third-party service requirements.',
+    ],
+  },
+  {
+    title: 'Orders and Payment',
+    body: 'Orders are accepted only after payment authorization and internal review are complete.',
+    items: [
+      'You agree to provide accurate contact, billing, and delivery information.',
+      'Payment approval does not guarantee order acceptance if fraud screening, stock limits, or fulfillment issues arise.',
+      'If an order cannot be fulfilled, we will contact you and may cancel the order or issue a refund.',
+    ],
+  },
+  {
+    title: 'Delivery and Fulfillment',
+    items: [
+      'Delivery timing depends on product type, payment review, fulfillment capacity, and the accuracy of the information you provide.',
+      'Standard shipping typically takes 10–15 business days after dispatch. Actual delivery times may vary due to carrier logistics, customs clearance, or local conditions.',
+      'Orders are considered delivered once the carrier confirms delivery to the provided address or the package is collected from a designated pickup point.',
+      'You are responsible for checking compatibility, region requirements, and account requirements before purchase.',
+    ],
+  },
+  {
+    title: 'Customer Responsibilities',
+    items: [
+      'Use the site lawfully and do not interfere with site security, checkout, payment systems, or other customers.',
+      'Keep your email account and order information secure.',
+      'Do not resell, redistribute, copy, or misuse products in violation of applicable product terms or laws.',
+    ],
+  },
+  {
+    title: 'Returns, Cancellations, and Refunds',
+    body: 'Return and refund requests are governed by our Return & Refund Policy. Where that policy conflicts with mandatory consumer law, the law will apply.',
+  },
+  {
+    title: 'Limitation of Liability',
+    body: 'To the fullest extent permitted by law, we are not liable for indirect, incidental, special, consequential, or punitive damages arising from your use of the site, checkout, products, or third-party services.',
+  },
+  {
+    title: 'Governing Law',
+    body: 'These Terms and Conditions are governed by and construed in accordance with the laws of the Hong Kong Special Administrative Region. Any disputes arising from these terms shall be subject to the exclusive jurisdiction of the courts of Hong Kong.',
+  },
+  {
+    title: 'Changes to These Terms',
+    body: 'We may update these terms from time to time. The latest version will be posted on this page with the updated date.',
+  },
+];
+---
+
+<BaseLayout
+  title={`Terms & Conditions | ${site.name}`}
+  description={`Read the ${site.name} terms for orders, payment, delivery, customer responsibilities, and refunds.`}
+>
+  <PolicyPage
+    eyebrow="Terms"
+    title="Terms & Conditions"
+    intro="These terms explain the rules that apply when you browse our store, place an order, complete payment, or request support."
+    updated={site.policyUpdatedAt}
+    sections={sections}
+    asideTitle="Before checkout"
+    asideText="Review product details, regional requirements, and your contact information before completing payment."
+    contactMethods={contactMethods}
+  />
+</BaseLayout>

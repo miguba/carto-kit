@@ -1,0 +1,32 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import ProductCard from "../components/ProductCard.astro";
+import { fetchProducts } from "../lib/ems";
+
+let products = [];
+let errorMessage = "";
+
+try {
+  products = await fetchProducts();
+} catch (error) {
+  errorMessage = error instanceof Error ? error.message : "Unable to load products.";
+}
+---
+<BaseLayout title="Products">
+  <section class="page-section">
+    <div class="section-heading">
+      <p class="eyebrow">EMS Storefront</p>
+      <h1>Products</h1>
+    </div>
+
+    {errorMessage && <div class="notice notice--error">{errorMessage}</div>}
+
+    {!errorMessage && products.length === 0 && (
+      <div class="notice">No products are published for this site yet.</div>
+    )}
+
+    <div class="product-grid">
+      {products.map((product) => <ProductCard product={product} />)}
+    </div>
+  </section>
+</BaseLayout>

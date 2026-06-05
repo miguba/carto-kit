@@ -1,0 +1,118 @@
+---
+import '@/styles/global.css';
+import { getSiteConfig } from '@/lib/config';
+
+type Props = {
+  title: string;
+  description?: string;
+  checkoutOnly?: boolean;
+};
+
+const site = getSiteConfig();
+const { title, description = `${site.name} — Genuine products, fast delivery, and a checkout experience that sparks joy.`, checkoutOnly = false } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="description" content={description} />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content={Astro.generator} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <div class="site-shell grid min-h-screen grid-rows-[auto_1fr_auto]">
+      {
+        checkoutOnly ? null : (
+          <header class="site-header">
+            <nav class="container nav" aria-label="Main navigation">
+              <a class="brand-lockup" href="/">
+                <img class="brand-mark h-10 w-10" src="/logo-mark.svg" alt="" aria-hidden="true" />
+                <span>{site.name}</span>
+              </a>
+              <div class="nav-primary-links" aria-label="Primary">
+                <a href="/#products">Products</a>
+                <a href="/#support">Support</a>
+                <a href="/cancellation-refund-policy">Returns</a>
+              </div>
+              <div class="nav-actions" aria-label="Store actions">
+                <a class="nav-help-link" href="/contact-us">
+                  <span>Secure checkout</span>
+                  <strong>Help available</strong>
+                </a>
+                <a class="nav-shop-button" href="/#products">View products</a>
+                <details class="mobile-nav-menu">
+                  <summary aria-label="Open navigation menu">
+                    <span aria-hidden="true"></span>
+                    <span aria-hidden="true"></span>
+                    <span aria-hidden="true"></span>
+                  </summary>
+                  <div class="mobile-nav-panel" aria-label="Mobile navigation">
+                    <a href="/#products">Products</a>
+                    <a href="/#support">Support</a>
+                    <a href="/cancellation-refund-policy">Returns</a>
+                  </div>
+                </details>
+              </div>
+            </nav>
+          </header>
+        )
+      }
+      <main>
+        <slot />
+      </main>
+      {
+        checkoutOnly ? null : (
+          <footer class="site-footer" aria-label="Footer">
+            <div class="container footer-hero grid gap-6 mb-12 pb-12 border-b border-white/12">
+              <p class="eyebrow">{site.name}</p>
+              <h2>Genuine products. Instant delivery. Joy in every order.</h2>
+              <a class="secondary-button w-fit" href="/#products">Explore the collection</a>
+            </div>
+            <div class="container footer-grid grid gap-8 mb-12">
+              <div class="footer-brand-col grid gap-5 content-start">
+                <a class="brand-lockup footer-logo inline-flex items-center gap-3 text-white font-black no-underline font-display text-2xl" href="/">
+                  <img class="brand-mark" src="/logo-mark.svg" alt="" aria-hidden="true" />
+                  <span>{site.name}</span>
+                </a>
+                <p class="footer-slogan">
+                  Genuine products, handpicked and delivered fast — with secure checkout and real human support when you need it.
+                </p>
+              </div>
+
+              <div class="footer-care-panel">
+                <div>
+                  <h4>Customer Care</h4>
+                  <p>Order questions, payment help, and store policies in one place.</p>
+                </div>
+                <div class="footer-policy-links grid gap-2.5 content-start">
+                  <a href="/contact-us">Contact Support</a>
+                  <a href="/shipping-policy">Shipping Policy</a>
+                  <a href="/cancellation-refund-policy">Return & Refund Policy</a>
+                  <a href="/terms-conditions">Terms of Service</a>
+                  <a href="/privacy-policy">Privacy &amp; Cookie Policy</a>
+                </div>
+              </div>
+            </div>
+
+            <div class="container footer-bottom mt-12 pt-8 border-t border-white/12">
+              <div class="footer-bottom-inner flex items-center justify-between gap-4">
+                <div>
+                  <p>&copy; {site.copyrightYear} {site.legalName}. All Rights Reserved.</p>
+                  <p class="footer-registered-address">FLAT/RM 1405A, 14/F, THE BELGIAN BANK BUILDING, NOS.721-725 NATHAN ROAD, MONGKOK, KL, HONG KONG</p>
+                </div>
+                <div class="footer-payment-badges flex items-center gap-2 text-sm">
+                  <span>Secure checkout via</span>
+                  <strong>Pay<span>Pal</span></strong>
+                </div>
+              </div>
+            </div>
+          </footer>
+        )
+      }
+    </div>
+  </body>
+</html>

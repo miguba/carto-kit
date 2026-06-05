@@ -1,0 +1,102 @@
+---
+type Section = {
+  title: string;
+  body?: string;
+  items?: string[];
+};
+
+type ContactMethod = {
+  label: string;
+  value: string;
+  href?: string;
+};
+
+type Props = {
+  eyebrow: string;
+  title: string;
+  intro: string;
+  updated: string;
+  sections: Section[];
+  asideTitle?: string;
+  asideText?: string;
+  contactMethods?: ContactMethod[];
+};
+
+const {
+  eyebrow,
+  title,
+  intro,
+  updated,
+  sections,
+  asideTitle = 'Need a hand?',
+  asideText = 'Our support team can help with order questions, policy details, and checkout assistance.',
+  contactMethods = [],
+} = Astro.props;
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+---
+
+<section class="policy-hero">
+  <div class="container policy-hero-grid">
+    <div class="policy-hero-copy">
+      <p class="eyebrow">{eyebrow}</p>
+      <h1>{title}</h1>
+      <p>{intro}</p>
+      <span>Last updated: {updated}</span>
+    </div>
+    <aside class="panel policy-aside" aria-label="Policy support information">
+      <p class="eyebrow">Customer Care</p>
+      <h2>{asideTitle}</h2>
+      <p>{asideText}</p>
+      {
+        contactMethods.length ? (
+          <div class="policy-contact-list grid gap-2.5 mt-5">
+            {contactMethods.map((method) =>
+              method.href ? (
+                <a href={method.href}>
+                  <span>{method.label}</span>
+                  <strong>{method.value}</strong>
+                </a>
+              ) : (
+                <div>
+                  <span>{method.label}</span>
+                  <strong>{method.value}</strong>
+                </div>
+              )
+            )}
+          </div>
+        ) : null
+      }
+    </aside>
+  </div>
+</section>
+
+<section class="policy-body-section section-tight">
+  <div class="container policy-body-grid">
+    <nav class="policy-index" aria-label="Page contents">
+      <strong>On this page</strong>
+      {sections.map((section) => <a href={`#${slugify(section.title)}`}>{section.title}</a>)}
+    </nav>
+    <article class="policy-content">
+      {
+        sections.map((section) => (
+          <section id={slugify(section.title)}>
+            <h2>{section.title}</h2>
+            {section.body ? <p>{section.body}</p> : null}
+            {section.items?.length ? (
+              <ul>
+                {section.items.map((item) => <li>{item}</li>)}
+              </ul>
+            ) : null}
+          </section>
+        ))
+      }
+    </article>
+  </div>
+</section>

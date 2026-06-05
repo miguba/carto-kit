@@ -1,0 +1,100 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { EMS_API_BASE_URL, EMS_SITE_DOMAIN } from "../../lib/config";
+import { fetchCommerceConfig, fetchProduct, fetchProducts } from "../../lib/ems";
+import { getProductImages, getProductPrice } from "../../lib/products";
+
+export const prerender = import.meta.env.FRONTEND_MODE === "static";
+
+export async function getStaticPaths() {
+  if (import.meta.env.FRONTEND_MODE !== "static") return [];
+  const products = await fetchProducts();
+  return products.map((product) => ({ params: { slug: product.slug } }));
+}
+
+const { slug } = Astro.params;
+const product = slug ? await fetchProduct(slug) : null;
+const config = await fetchCommerceConfig();
+const paymentConfig = config.payments || config.payment || {};
+const paypalReady = Boolean(paymentConfig.paypal?.enabled && paymentConfig.paypal.clientId);
+const stripeReady = Boolean(paymentConfig.stripe?.enabled && paymentConfig.stripe.publishableKey);
+
+if (!product) {
+  return Astro.redirect("/", 302);
+}
+
+const [image] = getProductImages(product);
+const publicCheckoutConfig = {
+  apiBaseUrl: EMS_API_BASE_URL,
+  siteDomain: EMS_SITE_DOMAIN,
+  product: {
+    id: product.id,
+    slug: product.slug,
+    title: product.title
+  },
+  payments: {
+    paypal: paymentConfig.paypal ? {
+      enabled: paymentConfig.paypal.enabled,
+      mode: paymentConfig.paypal.mode,
+      clientId: paymentConfig.paypal.clientId
+    } : undefined,
+    stripe: paymentConfig.stripe ? {
+      enabled: paymentConfig.stripe.enabled,
+      mode: paymentConfig.stripe.mode,
+      publishableKey: paymentConfig.stripe.publishableKey
+    } : undefined
+  }
+};
+---
+<BaseLayout title={`Checkout - ${product.title}`}>
+  <section class="checkout">
+    <aside class="checkout-summary">
+      {image && <img src={image.url} alt={image.alt || product.title} />}
+      <div>
+        <p class="eyebrow">Checkout</p>
+        <h1>{product.title}</h1>
+        <p class="price">{getProductPrice(product)}</p>
+      </div>
+    </aside>
+
+    <form class="checkout-form" id="checkout-form">
+      {!paypalReady && !stripeReady && (
+        <div class="notice notice--error">
+          Payment is not configured for this EMS site. Configure PayPal or Stripe in EMS and publish browser-visible payment config.
+        </div>
+      )}
+
+      <label>
+        Email
+        <input required type="email" name="email" autocomplete="email" />
+      </label>
+      <label>
+        Name
+        <input required type="text" name="name" autocomplete="name" />
+      </label>
+      <label>
+        Phone
+        <input type="tel" name="phone" autocomplete="tel" />
+      </label>
+      <label>
+        Quantity
+        <input required type="number" name="quantity" value="1" min="1" />
+      </label>
+
+      <fieldset class="provider-group">
+        <legend>Payment</legend>
+        {paypalReady && <label><input type="radio" name="provider" value="paypal" checked /> PayPal</label>}
+        {stripeReady && <label><input type="radio" name="provider" value="stripe" checked={!paypalReady} /> Stripe</label>}
+      </fieldset>
+
+      <button class="button" type="submit" disabled={!paypalReady && !stripeReady}>Create order</button>
+      <div id="payment-status" class="payment-status" role="status"></div>
+      <div id="paypal-buttons"></div>
+    </form>
+  </section>
+
+  <script is:inline type="application/json" id="checkout-config" set:html={JSON.stringify(publicCheckoutConfig)} />
+  <script>
+    import "./checkout-client";
+  </script>
+</BaseLayout>
