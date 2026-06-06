@@ -1,0 +1,79 @@
+---
+import PolicyPage from '@/components/PolicyPage.astro';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getSiteConfigFromServer } from '@/lib/commerce';
+
+const site = await getSiteConfigFromServer();
+
+const contactMethods = [
+  { label: 'Privacy requests', value: site.privacyEmail, href: `mailto:${site.privacyEmail}` },
+  { label: 'General support', value: site.supportEmail, href: `mailto:${site.supportEmail}` },
+];
+
+const sections = [
+  {
+    title: 'Information We Collect',
+    body: 'We collect information needed to operate the storefront, process orders, provide support, and improve the customer experience.',
+    items: [
+      'Contact details such as name, email address, phone number, and billing or delivery information.',
+      'Order details including purchased products, selected variants, quantity, order number, payment status, and fulfillment status.',
+      'Technical information such as browser type, device information, IP address, pages visited, and referral source.',
+      'Support messages and attachments you choose to send when requesting help.',
+    ],
+  },
+  {
+    title: 'How We Use Information',
+    items: [
+      'To create, confirm, fulfill, and support your orders.',
+      'To send order updates, payment notices, delivery information, and customer service responses.',
+      'To prevent fraud, protect the security of the store, and troubleshoot technical issues.',
+      'To understand how visitors use the site and improve page performance, product presentation, and checkout flow.',
+    ],
+  },
+  {
+    title: 'Payments',
+    body: 'Payments may be handled by third-party payment providers such as PayPal. We do not store full card numbers or complete payment account credentials on our site.',
+  },
+  {
+    title: 'Cookies and Analytics',
+    body: 'We may use cookies or similar technologies to keep the site functional, remember checkout state, measure performance, and understand aggregate traffic patterns. You can control cookies through your browser settings, though some checkout features may depend on them.',
+    items: [
+      'We use Google Analytics to understand how visitors interact with the site, including page views, traffic sources, and browsing behavior. Google Analytics may set cookies and collect anonymized data.',
+      'We use Google Ads conversion tracking to measure the effectiveness of our advertising campaigns. This may involve cookies that record when a user clicks an ad and completes a purchase.',
+      'Third-party services such as payment providers may also set cookies necessary for transaction processing.',
+    ],
+  },
+  {
+    title: 'Sharing Information',
+    items: [
+      'We share information with service providers only as needed for payment processing, order fulfillment, hosting, analytics, fraud prevention, and customer support.',
+      'We may disclose information if required by law, payment network rules, legal process, or to protect our rights and customers.',
+      'We do not sell personal information.',
+    ],
+  },
+  {
+    title: 'Your Choices',
+    body: 'You may ask us to access, correct, delete, or restrict certain personal information where applicable law allows. We may need to verify your identity before completing a request.',
+  },
+  {
+    title: 'Data Retention',
+    body: 'We keep order, payment, and support records for as long as needed to provide services, comply with legal obligations, resolve disputes, and maintain accurate business records.',
+  },
+];
+---
+
+<BaseLayout
+  title={`Privacy Policy | ${site.name}`}
+  description={`Learn how ${site.name} collects, uses, protects, and shares customer information.`}
+>
+  <PolicyPage
+    eyebrow="Privacy"
+    title="Privacy Policy"
+    intro="This policy explains what information we collect, why we collect it, and how you can contact us about your privacy choices."
+    updated={site.policyUpdatedAt}
+    sections={sections}
+    asideTitle="Questions about your data?"
+    asideText="We can help with access, correction, deletion, or account-related privacy questions."
+    contactMethods={contactMethods}
+  />
+</BaseLayout>

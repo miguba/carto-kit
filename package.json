@@ -1,14 +1,14 @@
 {
-  "name": "carto-kit",
+  "name": "carto-kit-monorepo",
   "version": "0.1.0",
   "private": true,
   "description": "Carto monorepo",
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "build": "npm --workspace create-carto run build",
-    "check": "npm --workspace create-carto run check",
-    "test": "npm run check && npm --prefix templates/astro-storefront run check && npm --prefix templates/astro-commerce-cloudflare run check"
+    "build": "npm --workspace carto-kit run build",
+    "check": "npm --workspace carto-kit run check",
+    "test": "npm run check && npm --prefix templates/single-product run check && npm --prefix templates/multi-product run check"
   },
   "workspaces": [
     "packages/*"

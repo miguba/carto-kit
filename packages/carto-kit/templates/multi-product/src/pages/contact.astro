@@ -1,0 +1,17 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getSiteConfigFromServer } from '@/lib/commerce';
+
+const site = await getSiteConfigFromServer();
+---
+
+<BaseLayout title={`Contact Us | ${site.name}`} description={`Contact ${site.name} support.`}>
+  <section class="error-state">
+    <div class="error-panel">
+      <p class="eyebrow">Contact</p>
+      <h1>Contact support at the new page.</h1>
+      <p>This support page now lives at <a href="/contact-us">/contact-us</a>.</p>
+      <a class="primary-button" href="/contact-us">Go to Contact Us</a>
+    </div>
+  </section>
+</BaseLayout>

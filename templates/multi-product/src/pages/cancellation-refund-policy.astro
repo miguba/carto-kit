@@ -1,0 +1,98 @@
+---
+import PolicyPage from '@/components/PolicyPage.astro';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getSiteConfigFromServer } from '@/lib/commerce';
+
+const site = await getSiteConfigFromServer();
+
+const contactMethods = [
+  { label: 'Support email', value: site.supportEmail, href: `mailto:${site.supportEmail}` },
+  { label: 'Order help', value: 'Contact us', href: '/contact-us' },
+];
+
+const sections = [
+  {
+    title: 'Return Window',
+    body: `We offer a 30-day return policy, which means you have 30 days after receiving your item to request a return. If 30 days have passed since delivery, we are unfortunately unable to offer a return or refund.`,
+  },
+  {
+    title: 'Return Eligibility',
+    body: 'To be eligible for a return, your item must meet the following conditions:',
+    items: [
+      'The item must be brand new and unopened, in the same condition that you received it — unworn or unused, with tags attached, and in its original packaging.',
+      'You must have a proof of purchase (order number or order confirmation email).',
+      'Items that have been opened, used, worn, washed, altered, or are missing original tags and packaging are not eligible for return.',
+      'Products marked as final sale or clearance at the time of purchase are not eligible for returns unless they arrive damaged or defective.',
+    ],
+  },
+  {
+    title: 'How to Initiate a Return',
+    body: `To start a return, please contact our support team at ${site.supportEmail} with your order number and the reason for return. We will review your request and provide return instructions, including the return shipping address.`,
+    items: [
+      'All returns must be sent by mail. We do not offer in-store or drop-off returns.',
+      'Do not send items back without contacting us first — unauthorized returns may not be accepted or processed.',
+      'We may ask for photos of the item or packaging to assess the condition before approving the return.',
+    ],
+  },
+  {
+    title: 'Return Shipping Costs',
+    body: 'Customers are responsible for the actual return shipping costs. We do not charge any restocking fees.',
+    items: [
+      'Return shipping costs are non-refundable.',
+      'If the return is due to an error on our part (e.g., wrong item sent, defective product), we will cover the return shipping cost.',
+      'We recommend using a trackable shipping service for your return, as we cannot guarantee receipt of items sent without tracking.',
+    ],
+  },
+  {
+    title: 'Refund Process',
+    body: 'Once we receive and inspect your return, we will notify you of the approval or rejection of your refund.',
+    items: [
+      'If approved, your refund will be issued to your original payment method within 5–7 business days.',
+      'Depending on your bank, card issuer, or payment provider, it may take additional time for the refund to appear in your account.',
+      'We will email you when the refund has been processed, or if additional information is needed.',
+    ],
+  },
+  {
+    title: 'Order Cancellations',
+    body: 'You may request cancellation before an order has been processed or dispatched. Because many products are prepared quickly after payment confirmation, please contact us as soon as possible with your order number.',
+    items: [
+      'If the order has not entered fulfillment, we will cancel it and issue a full refund to the original payment method.',
+      'If the order has already shipped or been handed to the carrier, the order may no longer be cancellable. In this case, you may request a return once the item is delivered.',
+    ],
+  },
+  {
+    title: 'Damaged or Defective Items',
+    body: `If your item arrives damaged or defective, please contact us at ${site.supportEmail} within 7 days of delivery with photos of the issue and your order number. We will arrange a replacement or full refund at no additional cost to you.`,
+  },
+  {
+    title: 'Non-Refundable Situations',
+    items: [
+      'Items returned after the 30-day return window has closed.',
+      'Items that have been used, worn, washed, altered, or are no longer in their original condition.',
+      'Refunds may be declined when the customer provides incorrect shipping information and the order has already been delivered to the given address.',
+      'We cannot refund charges caused by third-party payment fees, bank fees, foreign exchange differences, or account restrictions outside our control.',
+    ],
+  },
+  {
+    title: 'Chargebacks and Disputes',
+    body: 'If you open a payment dispute with your bank or card issuer, we may be required to respond through the payment provider instead of processing a direct refund. Contacting us first is usually the fastest and easiest way to resolve any order issues.',
+  },
+];
+---
+
+<BaseLayout
+  title={`Return & Refund Policy | ${site.name}`}
+  description={`Review ${site.name} return window, return eligibility, refund timing, and dispute handling policies.`}
+>
+  <PolicyPage
+    eyebrow="Policy"
+    title="Return & Refund Policy"
+    intro="We want you to be completely satisfied with your purchase. This policy explains our 30-day return window, how to initiate a return, and what to expect during the refund process."
+    updated={site.policyUpdatedAt}
+    sections={sections}
+    asideTitle="Need to return an item?"
+    asideText="Contact us with your order number and we will guide you through the return process step by step."
+    contactMethods={contactMethods}
+  />
+</BaseLayout>
+

@@ -1,0 +1,361 @@
+---
+import ProductPurchasePanel from "@/components/ProductPurchasePanel";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import { getCommerceConfigFromServer, getProduct, getProducts } from "@/lib/commerce";
+import {
+  IMAGE_PRESETS,
+  formatMoney,
+  imageSrcSet,
+  optimizedImageUrl,
+  productCardPrice,
+  productImages,
+  productTrustSignals,
+  stripFrontmatter,
+} from "@/lib/format";
+import type { Product } from "@/lib/types";
+
+export const prerender = false;
+
+const commerceConfig = await getCommerceConfigFromServer();
+const site = commerceConfig.site;
+const slug = String(Astro.params.slug ?? "");
+let product: Product | null = null;
+let relatedProducts: Product[] = [];
+let loadError = "";
+
+try {
+  product = slug ? await getProduct(slug) : null;
+  if (!product) {
+    loadError = "Missing product slug.";
+  } else {
+    const products = await getProducts(8);
+    relatedProducts = products
+      .filter((item) => item.slug !== product?.slug)
+      .slice(0, 4);
+  }
+} catch (error) {
+  loadError =
+    error instanceof Error ? error.message : "Unable to load product.";
+}
+
+const images = product ? productImages(product) : [];
+const sellingPoints = product?.sellingPoints ?? [];
+const attributes = Object.entries(product?.attributes ?? {});
+const description =
+  product?.description ||
+  (product?.content ? stripFrontmatter(product.content) : "");
+const descriptionHtml = description
+  ? renderProductMarkdown(description)
+  : "";
+const optionNames = product
+  ? Array.from(
+      new Set(
+        product.variants.flatMap((variant) =>
+          Object.keys(variant.optionValues),
+        ),
+      ),
+    )
+  : [];
+const lowestVariant = product?.variants.reduce(
+  (lowest, variant) => (variant.price < lowest.price ? variant : lowest),
+  product.variants[0],
+);
+const schema =
+  product && lowestVariant
+    ? {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        name: product.title,
+        image: images,
+        description: description || sellingPoints[0] || product.title,
+        sku: lowestVariant.sku,
+        offers: {
+          "@type": "Offer",
+          priceCurrency: product.currency,
+          price:
+            product.currency === "JPY"
+              ? lowestVariant.price
+              : lowestVariant.price / 100,
+          availability:
+            product.totalStock > 0
+              ? "https://schema.org/InStock"
+              : "https://schema.org/OutOfStock",
+        },
+      }
+    : null;
+
+function renderProductMarkdown(markdown: string) {
+  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+  const blocks: string[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+
+    if (!line.trim()) {
+      index += 1;
+      continue;
+    }
+
+    const heading = /^(#{1,6})\s+(.+)$/.exec(line);
+    if (heading) {
+      const level = Math.min(heading[1].length + 1, 6);
+      blocks.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+      index += 1;
+      continue;
+    }
+
+    const unorderedItems: string[] = [];
+    while (index < lines.length) {
+      const item = /^\s*[-*+]\s+(.+)$/.exec(lines[index]);
+      if (!item) break;
+      unorderedItems.push(`<li>${renderInlineMarkdown(item[1])}</li>`);
+      index += 1;
+    }
+    if (unorderedItems.length) {
+      blocks.push(`<ul>${unorderedItems.join("")}</ul>`);
+      continue;
+    }
+
+    const orderedItems: string[] = [];
+    while (index < lines.length) {
+      const item = /^\s*\d+[.)]\s+(.+)$/.exec(lines[index]);
+      if (!item) break;
+      orderedItems.push(`<li>${renderInlineMarkdown(item[1])}</li>`);
+      index += 1;
+    }
+    if (orderedItems.length) {
+      blocks.push(`<ol>${orderedItems.join("")}</ol>`);
+      continue;
+    }
+
+    const paragraph: string[] = [];
+    while (index < lines.length && lines[index].trim()) {
+      paragraph.push(lines[index].trim());
+      index += 1;
+    }
+    blocks.push(`<p>${renderInlineMarkdown(paragraph.join(" "))}</p>`);
+  }
+
+  return blocks.join("\n");
+}
+
+function renderInlineMarkdown(text: string) {
+  const pattern =
+    /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*/g;
+  let cursor = 0;
+  let html = "";
+
+  for (const match of text.matchAll(pattern)) {
+    html += escapeHtml(text.slice(cursor, match.index));
+
+    if (match[1] !== undefined) {
+      const alt = match[1];
+      const src = match[2];
+      if (isSafeImageUrl(src)) {
+        const imageUrl = optimizedImageUrl(src, IMAGE_PRESETS.markdown);
+        html += `<img src="${escapeAttribute(imageUrl)}" alt="${escapeAttribute(alt)}" loading="lazy" decoding="async" fetchpriority="low">`;
+      } else {
+        html += escapeHtml(alt);
+      }
+    } else if (match[3] !== undefined) {
+      const label = match[3];
+      const href = match[4];
+      html += isSafeLinkUrl(href)
+        ? `<a href="${escapeAttribute(href)}">${escapeHtml(label)}</a>`
+        : escapeHtml(label);
+    } else if (match[5] !== undefined) {
+      html += `<code>${escapeHtml(match[5])}</code>`;
+    } else if (match[6] !== undefined) {
+      html += `<strong>${escapeHtml(match[6])}</strong>`;
+    } else if (match[7] !== undefined) {
+      html += `<em>${escapeHtml(match[7])}</em>`;
+    }
+
+    cursor = match.index + match[0].length;
+  }
+
+  return html + escapeHtml(text.slice(cursor));
+}
+
+function isSafeImageUrl(url: string) {
+  return /^(https?:\/\/|\/(?!\/)|\.{0,2}\/)/i.test(url);
+}
+
+function isSafeLinkUrl(url: string) {
+  return /^(https?:\/\/|mailto:|tel:|\/(?!\/)|#)/i.test(url);
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function escapeAttribute(value: string) {
+  return escapeHtml(value).replace(/`/g, "&#96;");
+}
+---
+
+<BaseLayout
+  title={product ? `${product.title} | ${site.name}` : `Product Detail | ${site.name}`}
+  description={product
+    ? description || product.title
+    : `${site.name} product detail page.`}
+>
+  {
+    product ? (
+      <>
+        {schema ? (
+          <script
+            is:inline
+            type="application/ld+json"
+            set:html={JSON.stringify(schema)}
+          />
+        ) : null}
+
+        <ProductPurchasePanel product={product} mediaConfig={commerceConfig.media} client:load />
+
+        {description ||
+        attributes.length ||
+        optionNames.length ||
+        images.length ? (
+          <section class="section product-description-section">
+            <div class="container product-description-grid">
+              <article>
+                <p class="eyebrow">Description</p>
+                <h2>Product Details</h2>
+                {descriptionHtml ? (
+                  <div
+                    class="product-description-content"
+                    set:html={descriptionHtml}
+                  />
+                ) : (
+                  <p>
+                    No additional details are available for this product yet.
+                  </p>
+                )}
+              </article>
+              <article>
+                <p class="eyebrow">Specifications</p>
+                <h2>Product Attributes</h2>
+                <dl class="dl-list">
+                  {attributes.length ? (
+                    attributes.map(([key, value]) => (
+                      <div>
+                        <dt>{key}</dt>
+                        <dd>{value}</dd>
+                      </div>
+                    ))
+                  ) : (
+                    <>
+                      <div>
+                        <dt>Variant options</dt>
+                        <dd>
+                          {optionNames.length
+                            ? optionNames.join(", ")
+                            : `${product.variants.length} options available`}
+                        </dd>
+                      </div>
+                      {images.length ? (
+                        <div>
+                          <dt>Gallery</dt>
+                          <dd>{`${images.length} product image${images.length === 1 ? "" : "s"}`}</dd>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </dl>
+              </article>
+            </div>
+          </section>
+        ) : null}
+
+        {relatedProducts.length ? (
+          <section class="section-tight">
+            <div class="container section-header catalog-heading">
+              <div>
+                <p class="eyebrow">Keep Browsing</p>
+                <h2>You May Also Like</h2>
+              </div>
+              <p>Explore more curated creations from the {site.name} gallery.</p>
+            </div>
+            <div class="container grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-6">
+              {relatedProducts.map((item) => {
+                const image = productImages(item)[0];
+                const trust = productTrustSignals(item);
+                const price = productCardPrice(item);
+
+                return (
+                <a class="catalog-card" href={`/products/${item.slug}`}>
+                  <div class="media-frame catalog-card-art image-placeholder-frame">
+                    {image ? (
+                      <img
+                        src={optimizedImageUrl(image, IMAGE_PRESETS.card)}
+                        srcset={imageSrcSet(image, [360, 480, 720], { quality: IMAGE_PRESETS.card.quality })}
+                        sizes="(min-width: 640px) 280px, calc(100vw - 32px)"
+                        alt={item.title}
+                        loading="lazy"
+                        decoding="async"
+                        fetchpriority="low"
+                      />
+                    ) : (
+                      <span class="w-16 h-16 text-2xl" aria-hidden="true">
+                        {item.title.slice(0, 1).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div class="catalog-card-trust" aria-label={`${trust.rating} stars, ${trust.soldText}`}>
+                    <span aria-hidden="true">★★★★★</span>
+                    <strong>{trust.rating}</strong>
+                    <em>{trust.soldText}</em>
+                  </div>
+                  <div class="catalog-card-body grid gap-2">
+                    <h3>{item.title}</h3>
+                    {item.sellingPoints?.[0] ? <p>{item.sellingPoints[0]}</p> : null}
+                  </div>
+                  <div class="catalog-card-footer mt-auto pt-3 border-t border-line">
+                    <div class="catalog-price-stack">
+                      <strong>{formatMoney(price.price, item.currency)}</strong>
+                      {price.compareAtPrice ? (
+                        <span>
+                          <del>{formatMoney(price.compareAtPrice, item.currency)}</del>
+                          {price.discountPercent ? <em>{price.discountPercent}% off</em> : null}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                </a>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+
+        <section class="product-page-footer-nav">
+          <div class="container product-breadcrumbs" aria-label="Breadcrumb">
+            <a href="/">Home</a>
+            <span>/</span>
+            <a href="/#products">Collections</a>
+            <span>/</span>
+            <strong>{product.title}</strong>
+          </div>
+        </section>
+      </>
+    ) : (
+      <section class="error-state">
+        <div class="panel error-panel max-w-2xl text-center">
+          <p class="eyebrow">Product unavailable</p>
+          <h1>We could not load this product.</h1>
+          <p>{loadError}</p>
+          <a class="primary-button" href="/">
+            Back to products
+          </a>
+        </div>
+      </section>
+    )
+  }
+</BaseLayout>

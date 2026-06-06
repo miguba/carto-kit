@@ -30,16 +30,16 @@ npm create carto@latest
 
 ```text
 create-carto
+carto-kit
 ```
 
 CLI 负责交互式生成项目：
 
 - 选择项目名称。
-- 选择模板，v1 默认 `astro-storefront`。
-- 填写 EMS API 地址。
+- 选择模板：`single-product` 或 `multi-product`。
 - 填写 EMS site domain。
 - 选择前端模式：`static` 或 `ssr`，v1 默认 `ssr`。
-- 选择部署目标：`none`、`vps`、`cloudflare-pages`，v1 优先支持 `vps` 和 `none`。
+- 选择部署目标：`none`、`vps`、`cloudflare-workers`；模板决定业务形态，部署目标决定运行配置。
 - 生成 `.env`、部署配置、README 和项目文件。
 - 输出下一步命令。
 
@@ -64,16 +64,19 @@ carto-kit/
   PRODUCT_REQUIREMENTS.md
 
   packages/
-    create-carto/
+    carto-kit/
       package.json
       src/
         cli.ts
         prompts.ts
         scaffold.ts
         validators.ts
+    create-carto-wrapper/
+      package.json
+      cli.js
 
   templates/
-    astro-storefront/
+    single-product/
       package.json
       astro.config.mjs
       src/
@@ -82,35 +85,46 @@ carto-kit/
         deploy-vps.mjs
       .env.example
       README.md
+
+    multi-product/
+      package.json
+      astro.config.mjs
+      src/
+      public/
+      scripts/
+        prepare-deploy-config.ts
+        deploy-vps.mjs
+      .env.example
+      README.md
 ```
 
-`create-carto` 只负责初始化和复制模板，不承担 EMS 后端业务逻辑。
+`carto-kit` 负责配置管理、初始化和复制模板，不承担 EMS 后端业务逻辑。`create-carto` 只作为 `npm create carto` 的薄入口。
 
-`templates/astro-storefront` 是可独立运行的官方前端模板。
+`templates/single-product` 是可独立运行的官方前端模板。
+`templates/multi-product` 是多品目录店铺模板，按 `DEPLOYMENT_TARGET` 生成 Cloudflare 或 VPS 运行配置。
 
 ## 4. CLI 需求
 
 CLI 名称：
 
 ```bash
-create-carto
+carto-kit
 ```
 
 用户入口：
 
 ```bash
 npm create carto@latest
-npx create-carto
+carto-kit create
 ```
 
 交互问题：
 
 ```text
 Project name
-EMS API URL
 EMS site domain
 Frontend mode: SSR / Static
-Deployment target: None / VPS / Cloudflare Pages
+Deployment target: None / VPS / Cloudflare Workers
 Configure VPS deploy now? yes/no
 ```
 
@@ -126,7 +140,6 @@ scripts/deploy-vps.mjs
 `.env` 示例：
 
 ```env
-EMS_API_BASE_URL=https://ems.example.com
 EMS_SITE_DOMAIN=example.com
 PUBLIC_SITE_URL=https://example.com
 PRODUCT_DETAIL_URL_TEMPLATE=/products/{slug}
@@ -147,7 +160,6 @@ VPS_CADDY_DOMAIN=example.com
 CLI 必须校验：
 
 - 项目目录不存在或为空。
-- EMS API URL 是合法 URL。
 - site domain 非空。
 - deployment target 合法。
 - 不把 secret 打印到日志里。
@@ -225,7 +237,6 @@ Carto
 后台提供：
 
 - 复制初始化命令。
-- 生成 EMS API base URL。
 - 显示 site domain。
 - 创建或选择 server app token。
 - 提供 `.env` 片段。
@@ -235,7 +246,6 @@ Carto
 
 ```bash
 npm create carto@latest -- \
-  --api https://ems.example.com \
   --site example.com
 ```
 
@@ -299,7 +309,6 @@ CLI 测试：
 
 - 创建默认 Astro storefront 成功。
 - 已存在非空目录时报错。
-- 非法 EMS API URL 报错。
 - CLI 参数可跳过交互。
 - `.env` 正确生成。
 - secret 不出现在日志中。
