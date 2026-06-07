@@ -6,7 +6,6 @@ import { collectAnswers, type CliOptions } from "./prompts.js";
 import { scaffoldStorefront } from "./scaffold.js";
 import {
   deploymentTargets,
-  frontendModes,
   templates,
   validateDomain,
   validateHttpBaseUrl,
@@ -15,6 +14,7 @@ import {
 import {
   configFields,
   deleteUserConfigValue,
+  getConfigField,
   getConfigPath,
   parseConfigKey,
   readUserConfig,
@@ -31,7 +31,6 @@ async function main(): Promise<void> {
       "cloudflare-account-id": { type: "string" },
       "cloudflare-api-token": { type: "string" },
       template: { type: "string" },
-      mode: { type: "string" },
       deploy: { type: "string" },
       yes: { type: "boolean", short: "y" },
       help: { type: "boolean", short: "h" }
@@ -104,13 +103,6 @@ function parseOptions(values: Record<string, string | boolean | undefined>): Cli
     options.template = values.template as CliOptions["template"];
   }
 
-  if (typeof values.mode === "string") {
-    if (!frontendModes.includes(values.mode as never)) {
-      throw new Error(`Unknown frontend mode "${values.mode}".`);
-    }
-    options.mode = values.mode as CliOptions["mode"];
-  }
-
   if (typeof values.deploy === "string") {
     if (!deploymentTargets.includes(values.deploy as never)) {
       throw new Error(`Unknown deployment target "${values.deploy}".`);
@@ -135,9 +127,13 @@ async function handleConfigCommand(positionals: string[]): Promise<void> {
   }
 
   if (action === "get") {
+    if (!key) {
+      await printConfigList();
+      return;
+    }
     const configKey = requireConfigKey(key);
     const config = await readUserConfig();
-    console.log(config[configKey] ?? "");
+    console.log(config[configKey] ?? getConfigField(configKey).defaultValue);
     return;
   }
 
@@ -207,7 +203,7 @@ Usage:
   carto config set commerceApiBaseUrl https://ems.example.com
 
 Options:
-  --site <domain>      Site domain for single-product EMS lookup or VPS Caddy defaults
+  --site <domain>      Optional deployment domain for generated site URLs and VPS Caddy defaults
   --token <token>      EMS commerce API token, written to .env
   --api-base-url <url> Commerce API base URL for this generated storefront
   --cloudflare-account-id <id>
@@ -215,7 +211,6 @@ Options:
   --cloudflare-api-token <token>
                        Cloudflare API token for Cloudflare deploys
   --template <name>    Template ID: ${templates.join(", ")}
-  --mode <mode>        Frontend mode: ssr, static
   --deploy <target>    Deployment target: ${deploymentTargets.join(", ")}
   -y, --yes            Accept defaults for optional prompts
   -h, --help           Show help

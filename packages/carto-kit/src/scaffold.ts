@@ -31,6 +31,7 @@ export async function scaffoldStorefront(answers: StorefrontAnswers): Promise<Sc
 
   await replaceTemplateVars(projectDir, answers);
   await writeFile(resolve(projectDir, ".env"), buildEnvFile(answers), { mode: 0o600 });
+  await writeFile(resolve(projectDir, ".env.example"), buildEnvExampleFile(answers));
 
   if (answers.deploymentTarget !== "vps") {
     await rm(resolve(projectDir, "scripts", "deploy-vps.mjs"), { force: true });
@@ -40,6 +41,7 @@ export async function scaffoldStorefront(answers: StorefrontAnswers): Promise<Sc
 
   if (answers.deploymentTarget !== "cloudflare-workers") {
     await removePackageScript(projectDir, "gen:wc");
+    await removePackageScript(projectDir, "wrangler:generate");
     await removePackageScript(projectDir, "wrangler:check");
     if (answers.deploymentTarget === "vps") {
       await setPackageScript(projectDir, "deploy", getVpsDeployScript(answers.template));
@@ -48,7 +50,7 @@ export async function scaffoldStorefront(answers: StorefrontAnswers): Promise<Sc
     }
   }
 
-  if (answers.template === "multi-product" && answers.deploymentTarget !== "cloudflare-workers") {
+  if (answers.deploymentTarget !== "cloudflare-workers") {
     await stripCloudflareArtifacts(projectDir, answers);
   }
 
@@ -99,6 +101,7 @@ function getVpsDeployScript(template: StorefrontAnswers["template"]): string {
 
 async function stripCloudflareArtifacts(projectDir: string, answers: StorefrontAnswers): Promise<void> {
   await rm(resolve(projectDir, "scripts", "prepare-deploy-config.ts"), { force: true });
+  await rm(resolve(projectDir, "scripts", "gen-wrangler-config.ts"), { force: true });
   await rm(resolve(projectDir, "wrangler.jsonc"), { force: true });
   await rm(resolve(projectDir, "wrangler-prod.jsonc"), { force: true });
   await rm(resolve(projectDir, "package-lock.json"), { force: true });
@@ -115,6 +118,7 @@ async function stripCloudflareArtifacts(projectDir: string, answers: StorefrontA
   pkg.scripts = pkg.scripts ?? {};
   pkg.scripts.build = "astro build";
   delete pkg.scripts["gen:wc"];
+  delete pkg.scripts["wrangler:generate"];
   delete pkg.scripts["wrangler:check"];
   if (answers.deploymentTarget === "vps") {
     pkg.scripts.deploy = getVpsDeployScript(answers.template);
@@ -132,13 +136,14 @@ async function stripCloudflareArtifacts(projectDir: string, answers: StorefrontA
   const envExamplePath = resolve(projectDir, ".env.example");
   const envExample = await readOptionalFile(envExamplePath);
   if (envExample !== null) {
-    await writeFile(envExamplePath, removeCloudflareEnvBlock(envExample));
+    await writeFile(envExamplePath, stripEmptyEnvBlocks(envExample));
   }
 }
 
-function removeCloudflareEnvBlock(contents: string): string {
+function stripEmptyEnvBlocks(contents: string): string {
   return contents
     .replace(/\n?# Cloudflare deploy only\nCLOUDFLARE_ACCOUNT_ID=\nCLOUDFLARE_API_TOKEN=\n/g, "\n")
+    .replace(/\n?# VPS deploy only\nVPS_HOST=\nVPS_PORT=22\nVPS_USER=ubuntu\nVPS_SSH_KEY=\nVPS_DEPLOY_DIR=\/var\/www\/carto\nVPS_PM2_APP_NAME=carto\nVPS_APP_PORT=4321\n# Comma-separated domains are supported, for example: example\.com, www\.example\.com\nVPS_CADDY_DOMAIN=[^\n]*\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n");
 }
 
@@ -166,7 +171,6 @@ async function replaceTemplateVars(projectDir: string, answers: StorefrontAnswer
     ["__EMS_API_BASE_URL__", answers.commerceApiBaseUrl],
     ["__EMS_SITE_DOMAIN__", answers.siteDomain],
     ["__PUBLIC_SITE_URL__", `https://${answers.siteDomain}`],
-    ["__FRONTEND_MODE__", answers.frontendMode],
     ["__DEPLOYMENT_TARGET__", answers.deploymentTarget],
     ["__APP_NAME__", appName],
     ["__SITE_NAME__", siteName],
@@ -181,7 +185,16 @@ async function replaceTemplateVars(projectDir: string, answers: StorefrontAnswer
     ["__COPYRIGHT_YEAR__", currentYear]
   ]);
 
-  const files = ["package.json", "README.md", ".env.example", "astro.config.mjs", "commerce-api.md", "src/lib/config.ts"];
+  const files = [
+    "package.json",
+    "package-lock.json",
+    "README.md",
+    ".env.example",
+    "astro.config.mjs",
+    "commerce-api.md",
+    "wrangler.jsonc",
+    "src/lib/config.ts"
+  ];
   for (const file of files) {
     const path = resolve(projectDir, file);
     let contents = await readOptionalFile(path);
@@ -199,16 +212,22 @@ function buildEnvFile(answers: StorefrontAnswers): string {
   }
 
   const lines = [
-    `EMS_SITE_DOMAIN=${answers.siteDomain}`,
-    `PUBLIC_SITE_URL=https://${answers.siteDomain}`,
-    "PRODUCT_DETAIL_URL_TEMPLATE=/products/{slug}",
+    `APP_NAME=${toAppName(answers.projectName)}`,
+    "APP_ENV=development",
     "",
-    "# SSR only. Do not expose this to browser bundles.",
-    "EMS_SERVER_APP_TOKEN=",
+    "PUBLIC_FEATURED_PRODUCT_SLUG=microsoft-office-365-5-devices-license",
+    "PUBLIC_MAPBOX_ACCESS_TOKEN=",
     "",
-    "# Frontend build mode: ssr or static.",
-    `FRONTEND_MODE=${answers.frontendMode}`
+    "# Server only. Do not expose this to browser bundles.",
+    `COMMERCE_API_TOKEN=${formatEnvValue(answers.commerceApiToken)}`
   ];
+  if (answers.deploymentTarget === "cloudflare-workers") {
+    lines.unshift(
+      `CLOUDFLARE_ACCOUNT_ID=${formatEnvValue(answers.cloudflare.accountId)}`,
+      `CLOUDFLARE_API_TOKEN=${formatEnvValue(answers.cloudflare.apiToken)}`,
+      ""
+    );
+  }
   if (answers.deploymentTarget === "vps") {
     lines.push(
       "",
@@ -223,6 +242,87 @@ function buildEnvFile(answers: StorefrontAnswers): string {
       `VPS_CADDY_DOMAIN=${answers.vps.caddyDomain}`
     );
   }
+  return `${lines.join("\n")}\n`;
+}
+
+function buildEnvExampleFile(answers: StorefrontAnswers): string {
+  if (answers.template === "multi-product") {
+    return buildMultiProductEnvExampleFile(answers);
+  }
+
+  const lines = [
+    `APP_NAME=${toAppName(answers.projectName)}`,
+    "APP_ENV=development",
+    "",
+    "COMMERCE_API_TOKEN=replace-with-ems-server-app-token",
+    "PUBLIC_FEATURED_PRODUCT_SLUG=microsoft-office-365-5-devices-license",
+    "PUBLIC_MAPBOX_ACCESS_TOKEN=replace-with-mapbox-access-token"
+  ];
+
+  if (answers.deploymentTarget === "cloudflare-workers") {
+    lines.push(
+      "",
+      "# Cloudflare deploy",
+      "CLOUDFLARE_ACCOUNT_ID=",
+      "CLOUDFLARE_API_TOKEN="
+    );
+  }
+
+  if (answers.deploymentTarget === "vps") {
+    lines.push(
+      "",
+      "# VPS deploy",
+      "VPS_HOST=",
+      "VPS_PORT=22",
+      "VPS_USER=ubuntu",
+      "VPS_SSH_KEY=",
+      "VPS_DEPLOY_DIR=/var/www/carto",
+      "VPS_PM2_APP_NAME=carto",
+      "VPS_APP_PORT=4321",
+      "# Comma-separated domains are supported, for example: example.com, www.example.com",
+      `VPS_CADDY_DOMAIN=${answers.vps.caddyDomain}`
+    );
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
+function buildMultiProductEnvExampleFile(answers: StorefrontAnswers): string {
+  const lines = [
+    `APP_NAME=${toAppName(answers.projectName)}`,
+    "APP_ENV=development",
+    `DEPLOYMENT_TARGET=${answers.deploymentTarget}`,
+    "",
+    "COMMERCE_API_TOKEN=replace-with-ems-server-app-token",
+    "",
+    "PUBLIC_MAPBOX_ACCESS_TOKEN="
+  ];
+
+  if (answers.deploymentTarget === "cloudflare-workers") {
+    lines.push(
+      "",
+      "# Cloudflare deploy",
+      "CLOUDFLARE_ACCOUNT_ID=",
+      "CLOUDFLARE_API_TOKEN="
+    );
+  }
+
+  if (answers.deploymentTarget === "vps") {
+    lines.push(
+      "",
+      "# VPS deploy",
+      "VPS_HOST=",
+      "VPS_PORT=22",
+      "VPS_USER=ubuntu",
+      "VPS_SSH_KEY=",
+      "VPS_DEPLOY_DIR=/var/www/carto",
+      "VPS_PM2_APP_NAME=carto",
+      "VPS_APP_PORT=4321",
+      "# Comma-separated domains are supported, for example: example.com, www.example.com",
+      `VPS_CADDY_DOMAIN=${answers.vps.caddyDomain}`
+    );
+  }
+
   return `${lines.join("\n")}\n`;
 }
 

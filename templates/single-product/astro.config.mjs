@@ -1,15 +1,32 @@
-import { defineConfig } from "astro/config";
-import node from "@astrojs/node";
+import { defineConfig, envField, sessionDrivers } from 'astro/config';
+import node from '@astrojs/node';
+import react from '@astrojs/react';
+import tailwindcss from '@tailwindcss/vite';
 
-const mode = process.env.FRONTEND_MODE || "__FRONTEND_MODE__";
-const isStatic = mode === "static";
+const deploymentTarget = process.env.DEPLOYMENT_TARGET || "__DEPLOYMENT_TARGET__";
+const adapter = deploymentTarget === "cloudflare-workers"
+  ? (await import("@astrojs/cloudflare")).default()
+  : node({ mode: "standalone" });
 
 export default defineConfig({
-  output: isStatic ? "static" : "server",
-  adapter: isStatic ? undefined : node({ mode: "standalone" }),
+  output: 'server',
+  adapter,
+  session: {
+    driver: sessionDrivers.lruCache(),
+  },
+  integrations: [react()],
   vite: {
-    define: {
-      "import.meta.env.FRONTEND_MODE": JSON.stringify(mode)
-    }
-  }
+    resolve: {
+      dedupe: ["react", "react-dom"],
+    },
+    plugins: [tailwindcss()],
+  },
+  env: {
+    schema: {
+      COMMERCE_API_TOKEN: envField.string({
+        context: 'server',
+        access: 'secret',
+      }),
+    },
+  },
 });

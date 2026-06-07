@@ -1,0 +1,192 @@
+---
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getOrder } from '@/lib/commerce';
+import { formatMoney, normalizeImageUrl } from '@/lib/format';
+
+export const prerender = false;
+
+const { orderNo } = Astro.params;
+let order = null;
+let loadError = '';
+
+try {
+  order = orderNo ? await getOrder(orderNo) : null;
+  if (!order) {
+    loadError = 'Missing order number.';
+  }
+} catch (error) {
+  loadError = error instanceof Error ? error.message : 'Unable to load order.';
+}
+
+const paid = order?.paymentStatus === 'paid';
+const customerName = order ? `${order.customer.firstName} ${order.customer.lastName}`.trim() : '';
+const statusLabel = order ? order.status.charAt(0).toUpperCase() + order.status.slice(1) : '';
+const paymentLabel = order ? order.paymentStatus.charAt(0).toUpperCase() + order.paymentStatus.slice(1) : '';
+const orderItems = order
+  ? order.items.map((item) => ({
+      ...item,
+      imageUrl: item.image ? normalizeImageUrl(item.image) : '',
+    }))
+  : [];
+const progressDotBase = 'absolute left-5 top-5 h-[18px] w-[18px] rounded-full border-2';
+const progressDotComplete = `${progressDotBase} border-success bg-success shadow-[0_0_0_5px_rgba(23,122,77,0.12)] after:absolute after:left-[5px] after:top-[3px] after:h-2 after:w-1 after:rotate-45 after:border-b-2 after:border-r-2 after:border-white after:content-['']`;
+const progressDotPending = `${progressDotBase} border-muted/30 bg-white`;
+---
+
+<BaseLayout title={order ? `Order ${order.orderNo}` : 'Order status'} description="Order status and payment result.">
+  {
+    order ? (
+      <section class="py-[92px]">
+        <div class="mx-auto grid w-[min(1120px,calc(100%-32px))] max-w-[980px] gap-[18px]">
+          <div class={`${paid ? 'bg-[linear-gradient(135deg,rgba(242,184,75,0.22),transparent_34%),linear-gradient(145deg,#0f4a33_0%,#123f2d_52%,#0b241b_100%)]' : 'bg-[linear-gradient(135deg,rgba(242,184,75,0.2),transparent_34%),linear-gradient(145deg,#15171d_0%,#0f1d18_100%)]'} relative grid grid-cols-[minmax(0,1fr)_240px] items-end gap-7 overflow-hidden rounded-brand p-[clamp(26px,5vw,46px)] text-white shadow-[0_32px_90px_rgba(18,19,22,0.18)] after:absolute after:bottom-[-120px] after:right-[-80px] after:h-80 after:w-80 after:rounded-full after:border after:border-white/15 after:content-[''] max-[760px]:grid-cols-1`}>
+            <div class="relative z-[1]">
+              <span class="mb-[22px] inline-grid h-[54px] w-[54px] place-items-center rounded-full border border-white/25 bg-white/15 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 6 9 17l-5-5"></path>
+                </svg>
+              </span>
+              <p class="mb-2.5 mt-0 text-[0.78rem] font-extrabold uppercase tracking-[0.08em] text-accent">{paid ? 'Payment complete' : 'Order status'}</p>
+              <h1 class="m-0 max-w-[660px] text-[clamp(2.8rem,7vw,5.7rem)] leading-[0.92]">{paid ? 'Your order is confirmed.' : `Payment status: ${paymentLabel}`}</h1>
+              <p class="max-w-[590px] text-[1.02rem] leading-relaxed text-white/80">
+                We are preparing your 365 Deal order now. Keep <strong>{order.orderNo}</strong> handy for support and digital delivery updates.
+              </p>
+              <div class="mt-6 flex flex-wrap gap-2.5">
+                <a class="inline-flex min-h-12 items-center justify-center gap-2.5 rounded-brand border border-transparent bg-white px-[18px] font-extrabold text-[#123f2d] no-underline hover:bg-white/90" href="/">Continue shopping</a>
+                <a class="inline-flex min-h-12 items-center justify-center gap-2.5 rounded-brand border border-white/25 bg-white/10 px-[18px] font-extrabold text-white no-underline" href="/contact-us">Contact support</a>
+              </div>
+            </div>
+            <div class="relative z-[1] grid min-w-0 gap-[7px] rounded-brand border border-white/20 bg-white/10 p-5 backdrop-blur max-[760px]:max-w-[360px]" aria-label="Receipt snapshot">
+              <span class="text-[0.82rem] font-extrabold text-white/70">Order total</span>
+              <strong class="text-[2.1rem] leading-none text-white">{formatMoney(order.totalAmount, order.currency)}</strong>
+              <small class="text-[0.82rem] font-extrabold text-white/70">{order.itemCount} {order.itemCount === 1 ? 'item' : 'items'} · {paymentLabel}</small>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-px overflow-hidden rounded-brand border border-line/90 bg-line shadow-[0_18px_60px_rgba(18,19,22,0.07)] max-[760px]:grid-cols-1" aria-label="Order progress">
+            <div class="relative grid min-w-0 gap-1 bg-white/95 py-[18px] pl-[54px] pr-[18px]">
+              <span class="absolute left-5 top-5 h-[18px] w-[18px] rounded-full border-2 border-success bg-success shadow-[0_0_0_5px_rgba(23,122,77,0.12)] after:absolute after:left-[5px] after:top-[3px] after:h-2 after:w-1 after:rotate-45 after:border-b-2 after:border-r-2 after:border-white after:content-['']" aria-hidden="true"></span>
+              <strong class="text-[0.96rem] text-ink">Paid</strong>
+              <small class="text-[0.82rem] font-bold text-muted">Payment captured</small>
+            </div>
+            <div class="relative grid min-w-0 gap-1 bg-white/95 py-[18px] pl-[54px] pr-[18px]">
+              <span class={order.status === 'processing' || order.status === 'done' ? progressDotComplete : progressDotPending} aria-hidden="true"></span>
+              <strong class="text-[0.96rem] text-ink">Processing</strong>
+              <small class="text-[0.82rem] font-bold text-muted">Preparing digital delivery</small>
+            </div>
+            <div class="relative grid min-w-0 gap-1 bg-white/95 py-[18px] pl-[54px] pr-[18px]">
+              <span class={order.status === 'done' ? progressDotComplete : progressDotPending} aria-hidden="true"></span>
+              <strong class="text-[0.96rem] text-ink">Done</strong>
+              <small class="text-[0.82rem] font-bold text-muted">Order fulfilled</small>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-[minmax(0,1fr)_minmax(280px,0.72fr)] items-start gap-[18px] max-[760px]:grid-cols-1">
+            <div class="rounded-brand border border-line bg-white p-6 shadow-[0_22px_70px_rgba(18,19,22,0.07)]">
+              <div class="mb-[18px] flex items-start justify-between gap-[18px]">
+                <div>
+                  <p class="mb-1.5 mt-0 text-[0.78rem] font-extrabold uppercase tracking-[0.08em] text-brand">Receipt</p>
+                  <h2 class="m-0 text-[clamp(1.35rem,3vw,1.7rem)] leading-[1.1]">Order summary</h2>
+                </div>
+                <span class={`${paid ? 'border-success/20 bg-success/10 text-[#11633e]' : 'border-muted/20 bg-[#f7f9fc] text-muted'} inline-flex flex-none items-center rounded-full border px-2.5 py-[7px] text-[0.78rem] font-black uppercase`}>{paymentLabel}</span>
+              </div>
+            <dl class="mt-5 grid overflow-hidden bg-transparent">
+              <div class="flex justify-between gap-4 border-t border-line bg-white py-[13px]">
+                <dt>Status</dt>
+                <dd class="m-0 text-right">{statusLabel}</dd>
+              </div>
+              <div class="flex justify-between gap-4 border-t border-line bg-white py-[13px]">
+                <dt>Payment</dt>
+                <dd class="m-0 text-right">{paymentLabel}</dd>
+              </div>
+              <div class="flex justify-between gap-4 border-t border-line bg-white py-[13px]">
+                <dt>Items</dt>
+                <dd class="m-0 text-right">{order.itemCount}</dd>
+              </div>
+              <div class="flex justify-between gap-4 border-t border-line bg-white py-[13px]">
+                <dt>Subtotal</dt>
+                <dd class="m-0 text-right">{formatMoney(order.subtotalAmount, order.currency)}</dd>
+              </div>
+              <div class="flex justify-between gap-4 border-t border-line bg-white py-[13px]">
+                <dt>Shipping</dt>
+                <dd class="m-0 text-right">{formatMoney(order.shippingAmount, order.currency)}</dd>
+              </div>
+              <div class="flex justify-between gap-4 border-t border-line bg-white py-[13px]">
+                <dt>Tax</dt>
+                <dd class="m-0 text-right">{formatMoney(order.taxAmount, order.currency)}</dd>
+              </div>
+              <div class="mt-1.5 flex justify-between gap-4 border-t border-line bg-white pb-[13px] pt-[18px] text-[1.12rem] font-black text-ink">
+                <dt class="text-ink">Total</dt>
+                <dd class="m-0 text-right">{formatMoney(order.totalAmount, order.currency)}</dd>
+              </div>
+            </dl>
+          </div>
+
+          <div class="rounded-brand border border-line bg-white p-6 shadow-[0_22px_70px_rgba(18,19,22,0.07)]">
+            <div class="mb-[18px] flex items-start justify-between gap-[18px]">
+              <div>
+                <p class="mb-1.5 mt-0 text-[0.78rem] font-extrabold uppercase tracking-[0.08em] text-brand">Details</p>
+                <h2 class="m-0 text-[clamp(1.35rem,3vw,1.7rem)] leading-[1.1]">Delivery info</h2>
+              </div>
+            </div>
+            <dl class="mt-5 grid overflow-hidden bg-transparent">
+              <div class="flex justify-between gap-4 border-t border-line bg-white py-[13px]">
+                <dt>Customer</dt>
+                <dd class="m-0 max-w-[260px] text-right leading-[1.45]">{customerName}</dd>
+              </div>
+              <div class="flex justify-between gap-4 border-t border-line bg-white py-[13px]">
+                <dt>Email</dt>
+                <dd class="m-0 max-w-[260px] text-right leading-[1.45]">{order.customer.email}</dd>
+              </div>
+              <div class="flex justify-between gap-4 border-t border-line bg-white py-[13px]">
+                <dt>Ship to</dt>
+                <dd class="m-0 max-w-[260px] text-right leading-[1.45]">
+                  {order.shippingAddress.address1}
+                  {order.shippingAddress.address2 ? `, ${order.shippingAddress.address2}` : ''}<br />
+                  {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.postalCode}<br />
+                  {order.shippingAddress.country}
+                </dd>
+              </div>
+            </dl>
+          </div>
+          </div>
+
+          <div class="rounded-brand border border-line bg-white p-6 pb-[26px] shadow-[0_22px_70px_rgba(18,19,22,0.07)]">
+            <div class="mb-[18px] flex items-start justify-between gap-[18px]">
+              <div>
+                <p class="mb-1.5 mt-0 text-[0.78rem] font-extrabold uppercase tracking-[0.08em] text-brand">Box contents</p>
+                <h2 class="m-0 text-[clamp(1.35rem,3vw,1.7rem)] leading-[1.1]">Items</h2>
+              </div>
+              <span class="inline-flex flex-none items-center rounded-full border border-muted/20 bg-[#f7f9fc] px-2.5 py-[7px] text-[0.78rem] font-black uppercase text-muted">{order.items.length} {order.items.length === 1 ? 'line' : 'lines'}</span>
+            </div>
+            <div class="grid gap-3">
+              {orderItems.map((item) => (
+                <article class="grid grid-cols-[92px_minmax(0,1fr)_auto] items-center gap-[18px] rounded-brand border border-line bg-[linear-gradient(180deg,#fff,#fbfcff)] p-3.5 max-[760px]:grid-cols-1">
+                  <div class="grid h-[92px] w-[92px] place-items-center overflow-hidden rounded-brand border border-line/80 bg-[#f4f6fa] max-[760px]:h-auto max-[760px]:w-full max-[760px]:aspect-video">
+                    {item.imageUrl ? <img class="h-full w-full object-cover" src={item.imageUrl} alt={item.productTitle} loading="lazy" /> : <span class="font-black text-brand" aria-hidden="true">W</span>}
+                  </div>
+                  <div class="min-w-0">
+                    <strong class="line-clamp-2 overflow-hidden text-[1.02rem] leading-tight text-ink max-[760px]:line-clamp-3">{item.productTitle}</strong>
+                    <span class="mt-2 block text-[0.9rem] font-bold text-muted">{item.sku}</span>
+                  </div>
+                  <div class="grid justify-items-end gap-2 text-right max-[760px]:flex max-[760px]:items-center max-[760px]:justify-between max-[760px]:text-left">
+                    <span class="block text-[0.9rem] font-bold text-muted">Qty {item.quantity}</span>
+                    <em class="not-italic font-black">{formatMoney(item.lineTotal, order.currency)}</em>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+    ) : (
+      <section class="grid min-h-[62vh] place-items-center px-4 py-12">
+        <div class="max-w-[620px] rounded-brand border border-line bg-white p-8 shadow-soft-card">
+          <p class="mb-3.5 mt-0 text-[0.78rem] font-extrabold uppercase tracking-[0.08em] text-brand">Order unavailable</p>
+          <h1 class="mb-3 mt-0 text-[clamp(2rem,7vw,4rem)] leading-none">We could not load this order.</h1>
+          <p class="leading-relaxed text-muted">{loadError}</p>
+          <a class="inline-flex min-h-12 items-center justify-center gap-2.5 rounded-brand border border-transparent bg-brand px-[18px] font-extrabold text-white no-underline shadow-[0_16px_40px_rgba(35,100,232,0.26)] hover:bg-brand-strong" href="/">Return to product</a>
+        </div>
+      </section>
+    )
+  }
+</BaseLayout>

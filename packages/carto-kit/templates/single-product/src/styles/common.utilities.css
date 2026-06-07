@@ -1,0 +1,56 @@
+@utility wrap-s {
+  @apply mx-auto max-w-4xl px-5;
+}
+
+@utility wrap {
+  @apply mx-auto max-w-6xl px-5;
+}
+
+@utility rich {
+  @apply mb-5 lg:text-base;
+
+  .rich img {
+    @apply block w-full align-middle;
+  }
+
+  h1 {
+    @apply mb-5;
+  }
+
+  h2 {
+    @apply text-[1.4em] text-slate-700;
+  }
+
+  h3 {
+    @apply text-[1.15em] text-slate-700;
+  }
+
+  p {
+    @apply mb-3;
+  }
+
+  ul {
+    @apply mb-3 list-inside list-disc;
+  }
+
+  li {
+    @apply mb-2;
+  }
+
+  li > p {
+    display: inline;
+  }
+}
+
+@utility box {
+  @apply space-y-3 border bg-white p-5 md:p-8;
+}
+
+@utility cy {
+  @apply relative pl-8;
+}
+
+.cy::after {
+  content: '✓';
+  @apply absolute left-0 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-green-500 align-middle text-sm text-white;
+}

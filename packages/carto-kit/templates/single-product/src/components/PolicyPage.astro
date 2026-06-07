@@ -1,0 +1,102 @@
+---
+type Section = {
+  title: string;
+  body?: string;
+  items?: string[];
+};
+
+type ContactMethod = {
+  label: string;
+  value: string;
+  href?: string;
+};
+
+type Props = {
+  eyebrow: string;
+  title: string;
+  intro: string;
+  updated: string;
+  sections: Section[];
+  asideTitle?: string;
+  asideText?: string;
+  contactMethods?: ContactMethod[];
+};
+
+const {
+  eyebrow,
+  title,
+  intro,
+  updated,
+  sections,
+  asideTitle = 'Need a hand?',
+  asideText = 'Our support team can help with order questions, policy details, and checkout assistance.',
+  contactMethods = [],
+} = Astro.props;
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+---
+
+<section class="overflow-hidden bg-[linear-gradient(135deg,rgba(35,100,232,0.13),transparent_38%),linear-gradient(180deg,#f7f9ff_0%,#ffffff_100%)] py-[72px] pb-[54px] max-[900px]:pt-[54px] max-[575px]:py-11 max-[575px]:pb-[38px]">
+  <div class="mx-auto grid w-[min(1120px,calc(100%-32px))] grid-cols-[minmax(0,1fr)_minmax(300px,0.42fr)] items-end gap-[34px] max-[900px]:grid-cols-1 max-[900px]:items-start">
+    <div>
+      <p class="mb-3.5 mt-0 text-[0.78rem] font-extrabold uppercase tracking-[0.08em] text-brand">{eyebrow}</p>
+      <h1 class="m-0 max-w-[860px] text-[clamp(3rem,7vw,6.4rem)] leading-[0.9] max-[575px]:text-[clamp(2.4rem,15vw,4rem)]">{title}</h1>
+      <p class="mt-[22px] max-w-[760px] text-[clamp(1.05rem,1.8vw,1.24rem)] leading-[1.68] text-muted">{intro}</p>
+      <span class="mt-6 inline-flex rounded-full bg-white px-3 py-[9px] text-[0.86rem] font-extrabold text-muted shadow-[0_12px_34px_rgba(18,19,22,0.06)]">Last updated: {updated}</span>
+    </div>
+    <aside class="rounded-brand border border-line bg-white/90 p-6 shadow-[0_24px_80px_rgba(18,19,22,0.08)] max-[575px]:p-[18px]" aria-label="Policy support information">
+      <p class="mb-3.5 mt-0 text-[0.78rem] font-extrabold uppercase tracking-[0.08em] text-brand">Customer Care</p>
+      <h2 class="m-0 text-[clamp(1.4rem,3vw,2.1rem)] leading-[1.08]">{asideTitle}</h2>
+      <p class="mt-3 leading-[1.65] text-muted">{asideText}</p>
+      {
+        contactMethods.length ? (
+          <div class="mt-5 grid gap-2.5">
+            {contactMethods.map((method) => (
+              method.href ? (
+                <a class="grid gap-1 rounded-brand border border-line/80 bg-white p-3 no-underline" href={method.href}>
+                  <span class="text-[0.78rem] font-extrabold uppercase text-muted">{method.label}</span>
+                  <strong class="[overflow-wrap:anywhere] text-[0.96rem] text-ink">{method.value}</strong>
+                </a>
+              ) : (
+                <div class="grid gap-1 rounded-brand border border-line/80 bg-white p-3">
+                  <span class="text-[0.78rem] font-extrabold uppercase text-muted">{method.label}</span>
+                  <strong class="[overflow-wrap:anywhere] text-[0.96rem] text-ink">{method.value}</strong>
+                </div>
+              )
+            ))}
+          </div>
+        ) : null
+      }
+    </aside>
+  </div>
+</section>
+
+<section class="py-[58px] pb-[86px] max-[575px]:py-[38px] max-[575px]:pb-[62px]">
+  <div class="mx-auto grid w-[min(1120px,calc(100%-32px))] grid-cols-[260px_minmax(0,1fr)] items-start gap-[42px] max-[900px]:grid-cols-1">
+    <nav class="sticky top-[92px] grid gap-2.5 rounded-brand border border-line bg-white p-[18px] max-[900px]:static max-[575px]:p-[18px]" aria-label="Page contents">
+      <strong class="mb-1.5 text-[0.86rem] font-black uppercase text-ink">On this page</strong>
+      {sections.map((section) => <a class="text-[0.94rem] font-bold leading-[1.35] text-muted no-underline hover:text-brand" href={`#${slugify(section.title)}`}>{section.title}</a>)}
+    </nav>
+    <article class="grid gap-[18px]">
+      {
+        sections.map((section) => (
+          <section class="rounded-brand border border-line/80 bg-white p-[clamp(22px,4vw,34px)] shadow-[0_18px_58px_rgba(18,19,22,0.05)] max-[575px]:p-[18px]" id={slugify(section.title)}>
+            <h2 class="m-0 text-[clamp(1.55rem,3vw,2.35rem)] leading-[1.08]">{section.title}</h2>
+            {section.body ? <p class="mt-3.5 text-base leading-[1.72] text-muted">{section.body}</p> : null}
+            {section.items?.length ? (
+              <ul class="mt-4 grid gap-2.5 pl-5 marker:text-brand">
+                {section.items.map((item) => <li class="text-base leading-[1.72] text-muted">{item}</li>)}
+              </ul>
+            ) : null}
+          </section>
+        ))
+      }
+    </article>
+  </div>
+</section>

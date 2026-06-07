@@ -2,11 +2,9 @@ import { access, readdir, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 
 export const deploymentTargets = ["none", "vps", "cloudflare-workers"] as const;
-export const frontendModes = ["ssr", "static"] as const;
 export const templates = ["single-product", "multi-product"] as const;
 
 export type DeploymentTarget = (typeof deploymentTargets)[number];
-export type FrontendMode = (typeof frontendModes)[number];
 export type StorefrontTemplate = (typeof templates)[number];
 export type TargetDirectoryStatus =
   | { kind: "missing"; path: string }
@@ -27,9 +25,9 @@ export function validateProjectName(value: string): true | string {
 
 export function validateDomain(value: string): true | string {
   const domain = value.trim();
-  if (!domain) return "EMS site domain is required.";
+  if (!domain) return "Site domain is required.";
   if (domain.includes("://")) return "Use a domain such as example.com, not a URL.";
-  if (!/^[a-zA-Z0-9.-]+(:\d+)?$/.test(domain)) return "EMS site domain contains invalid characters.";
+  if (!/^[a-zA-Z0-9.-]+(:\d+)?$/.test(domain)) return "Site domain contains invalid characters.";
   return true;
 }
 

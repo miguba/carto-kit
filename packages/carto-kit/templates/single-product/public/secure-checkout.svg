@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="834" height="493" viewBox="0 0 834 493" role="img" aria-label="Guaranteed safe checkout">
+  <rect width="834" height="493" fill="#fff"/>
+  <g fill="#606060" font-family="Arial, Helvetica, sans-serif" font-weight="700">
+    <g transform="translate(126 2)">
+      <path d="M96 8l15 8 17-1 11 13 16 5 5 16 13 11-1 17 8 15-8 15 1 17-13 11-5 16-16 5-11 13-17-1-15 8-15-8-17 1-11-13-16-5-5-16-13-11 1-17-8-15 8-15-1-17 13-11 5-16 16-5 11-13 17 1z" fill="none" stroke="#606060" stroke-width="8"/>
+      <text x="96" y="76" text-anchor="middle" font-size="42">100%</text>
+      <path d="M14 97h164v35H14z" fill="#606060"/>
+      <text x="96" y="122" text-anchor="middle" font-size="24" fill="#fff">MONEY BACK</text>
+    </g>
+    <g transform="translate(338 35)">
+      <text x="12" y="35" font-size="42" letter-spacing="7">EASY</text>
+      <text x="12" y="72" font-size="25" letter-spacing="5" font-weight="400">RETURNS</text>
+      <rect x="10" y="92" width="154" height="24" rx="3"/>
+      <circle cx="42" cy="126" r="12"/>
+      <circle cx="151" cy="126" r="12"/>
+      <path d="M164 46h38l35 45v25h-37l-1-55h-35z" fill="#606060"/>
+      <path d="M188 55l24 31h-24z" fill="#fff" opacity=".95"/>
+    </g>
+    <g transform="translate(560 13)">
+      <circle cx="82" cy="82" r="72" fill="none" stroke="#606060" stroke-width="8"/>
+      <text x="82" y="75" text-anchor="middle" font-size="45">100%</text>
+      <text x="82" y="103" text-anchor="middle" font-size="22">SATISFACTION</text>
+      <text x="82" y="130" text-anchor="middle" font-size="22">GUARANTEE</text>
+    </g>
+  </g>
+  <g transform="translate(1 217)">
+    <path d="M88 0h655M0 52v-42c0-6 4-10 10-10h78M833 52v-42c0-6-4-10-10-10h-80M0 52v210c0 7 5 12 12 12h809c7 0 12-5 12-12V52" fill="none" stroke="#606060" stroke-width="6"/>
+    <text x="417" y="18" fill="#606060" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="700" text-anchor="middle">Guaranteed SAFE Checkout</text>
+  </g>
+  <g transform="translate(31 269)">
+    <rect x="0" y="0" width="222" height="90" rx="10" fill="#f7f7f7" stroke="#777" stroke-width="3"/>
+    <rect x="143" y="7" width="72" height="76" fill="#c9e31d"/>
+    <text x="16" y="31" font-family="Arial, Helvetica, sans-serif" font-size="30" fill="#1f2937">SSL</text>
+    <text x="16" y="58" font-family="Arial, Helvetica, sans-serif" font-size="24" fill="#1f2937">Secure</text>
+    <text x="16" y="79" font-family="Arial, Helvetica, sans-serif" font-size="23" fill="#1f2937">Connection</text>
+    <rect x="164" y="36" width="40" height="36" rx="4" fill="#ffc400" stroke="#8a8a8a" stroke-width="3"/>
+    <path d="M171 36v-13c0-15 12-27 27-27s27 12 27 27v13" transform="translate(-14 4)" fill="none" stroke="#777" stroke-width="5"/>
+    <path d="M182 54l16 16 34-42" fill="none" stroke="#fff" stroke-width="8"/>
+    <path d="M182 54l16 16 34-42" fill="none" stroke="#777" stroke-width="3"/>
+  </g>
+  <g font-family="Arial, Helvetica, sans-serif" font-weight="700">
+    <text x="277" y="354" fill="#003087" font-size="31">PayPal</text>
+    <text x="389" y="330" fill="#1f2937" font-size="42">i</text>
+    <rect x="411" y="286" width="56" height="58" fill="#e1007a"/>
+    <text x="439" y="322" text-anchor="middle" fill="#fff" font-size="18">DEAL</text>
+    <text x="496" y="346" fill="#667085" font-size="31">Belfius</text>
+    <circle cx="651" cy="302" r="17" fill="#00a3e0"/>
+    <text x="607" y="346" fill="#164194" font-size="20">KBC/CBC</text>
+    <text x="710" y="323" fill="#ff8a00" font-size="23" font-style="italic">SOFORT</text>
+    <text x="712" y="345" fill="#777" font-size="14">BANKING</text>
+  </g>
+  <g transform="translate(31 390)">
+    <ellipse cx="52" cy="40" rx="48" ry="40" fill="#ffb51b"/>
+    <path d="M28 34l29 30 59-78" fill="none" stroke="#111" stroke-width="11"/>
+    <text x="86" y="35" font-family="Arial, Helvetica, sans-serif" font-size="35" font-weight="700" fill="#111">Norton</text>
+    <text x="99" y="67" font-family="Arial, Helvetica, sans-serif" font-size="27" fill="#777" letter-spacing="2">SECURED</text>
+    <rect x="240" y="5" width="96" height="59" rx="4" fill="#0959a3"/>
+    <circle cx="278" cy="34" r="23" fill="#ea001b"/>
+    <circle cx="302" cy="34" r="23" fill="#f79e1b" opacity=".94"/>
+    <rect x="350" y="5" width="96" height="59" rx="4" fill="#1976bd"/>
+    <text x="398" y="30" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" fill="#fff">AMERICAN</text>
+    <text x="398" y="50" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="19" font-weight="700" fill="#fff">EXPRESS</text>
+    <rect x="462" y="5" width="96" height="59" rx="4" fill="#f7f7f7" stroke="#cfcfcf"/>
+    <text x="510" y="43" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="#2369b3">VISA</text>
+    <rect x="570" y="5" width="113" height="59" rx="4" fill="#f7f7f7" stroke="#cfcfcf"/>
+    <text x="626" y="29" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" fill="#0066b3">Bancontact</text>
+    <path d="M589 39h74" stroke="#f2c300" stroke-width="9"/>
+    <path d="M609 39h34" stroke="#0056a4" stroke-width="9"/>
+    <text x="626" y="55" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#444">Mister Cash</text>
+    <rect x="697" y="5" width="84" height="59" rx="4" fill="#2c83bb"/>
+    <circle cx="728" cy="34" r="23" fill="#fff"/>
+    <rect x="731" y="15" width="33" height="38" fill="#fff"/>
+  </g>
+</svg>

@@ -1,0 +1,37 @@
+---
+import CheckoutLoader from '@/components/CheckoutLoader';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getCommerceConfigFromServer } from '@/lib/commerce';
+import { getCommerceConfig } from '@/lib/config';
+
+export const prerender = false;
+
+const slug = Astro.url.searchParams.get('slug') || '';
+const sku = Astro.url.searchParams.get('sku') || '';
+const quantity = Math.max(1, Number(Astro.url.searchParams.get('quantity') || '1'));
+const { mapboxAccessToken } = getCommerceConfig();
+
+let paypalClientId = '';
+
+try {
+  const config = await getCommerceConfigFromServer();
+  paypalClientId = config.payments.paypal.clientId;
+} catch (error) {
+  console.error('Failed to fetch server commerce config:', error);
+}
+---
+
+<BaseLayout
+  checkoutOnly
+  title="Secure Checkout | 365 Deal"
+  description="Complete your Microsoft 365 order with PayPal protected checkout."
+>
+  <CheckoutLoader
+    slug={slug}
+    sku={sku}
+    quantity={quantity}
+    mapboxAccessToken={mapboxAccessToken}
+    paypalClientIdFallback={paypalClientId}
+    client:only="react"
+  />
+</BaseLayout>

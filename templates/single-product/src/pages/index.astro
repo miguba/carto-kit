@@ -1,32 +1,429 @@
 ---
-import BaseLayout from "../layouts/BaseLayout.astro";
-import ProductCard from "../components/ProductCard.astro";
-import { fetchProducts } from "../lib/ems";
+import ProductPurchasePanel from '@/components/ProductPurchasePanel';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { getCommerceConfigFromServer } from '@/lib/commerce';
+import {
+  normalizeImageUrl,
+  productImages,
+  extractProductContentImages,
+  removeProductContentImages,
+  renderProductMarkdownHtml,
+  stripFrontmatter,
+} from '@/lib/format';
+import { getPurchaseProducts } from '@/lib/purchase-products';
+import type { Product } from '@/lib/types';
 
-let products = [];
-let errorMessage = "";
+export const prerender = false;
+
+const initialProductKey = Astro.url.searchParams.get('product') ?? '';
+let purchaseProducts: Awaited<ReturnType<typeof getPurchaseProducts>> | null =
+  null;
+let product: Product | null = null;
+let loadError = '';
 
 try {
-  products = await fetchProducts();
+  await getCommerceConfigFromServer();
+  purchaseProducts = await getPurchaseProducts();
+  const selectedItem =
+    purchaseProducts.items.find((item) => item.key === initialProductKey) ??
+    purchaseProducts.items.find(
+      (item) => item.key === purchaseProducts?.defaultKey,
+    ) ??
+    purchaseProducts.items[0] ??
+    null;
+  product = selectedItem?.product ?? null;
 } catch (error) {
-  errorMessage = error instanceof Error ? error.message : "Unable to load products.";
+  loadError =
+    error instanceof Error ? error.message : 'Unable to load product.';
 }
+
+const description =
+  product?.description ||
+  (product?.content ? stripFrontmatter(product.content) : '');
+const contentImages = product?.content
+  ? extractProductContentImages(product.content)
+  : [];
+const contentWithoutImages = product?.content
+  ? removeProductContentImages(product.content)
+  : '';
+const productMediaImages = product ? productImages(product) : [];
+const mainProductImage = product?.mainImage
+  ? normalizeImageUrl(product.mainImage)
+  : '';
+const productDecoration =
+  product?.decoration ?? product?.meta?.decoration ?? null;
+const decorationImages =
+  productDecoration?.pics
+    ?.map((image) => normalizeImageUrl(image))
+    .filter(Boolean) ?? [];
+const galleryImages = product
+  ? Array.from(
+      new Set([...productMediaImages, ...decorationImages, ...contentImages]),
+    ).slice(0, 18)
+  : [];
+const heroBanner =
+  decorationImages[0] ?? galleryImages[1] ?? galleryImages[0] ?? '';
+const safeCheckoutImage =
+  galleryImages.find((image) =>
+    /checkout|safe|paypal|visa|master|secure/i.test(image),
+  ) ?? '';
+const detailImages = galleryImages
+  .filter(
+    (image) =>
+      image !== heroBanner &&
+      image !== safeCheckoutImage &&
+      image !== mainProductImage,
+  )
+  .slice(0, 12);
+const descriptionParagraphs = [
+  ...(description ? [description] : []),
+  ...(contentWithoutImages ? [contentWithoutImages] : []),
+]
+  .join('\n\n')
+  .split(/\n{2,}/)
+  .map((paragraph) => paragraph.trim())
+  .filter((paragraph) => !paragraph.startsWith('!['))
+  .filter(Boolean)
+  .filter(
+    (paragraph, index, paragraphs) =>
+      paragraphs.findIndex((item) => item === paragraph) === index,
+  );
+const descriptionMarkdown = descriptionParagraphs.length
+  ? descriptionParagraphs.join('\n\n')
+  : [
+      'Microsoft 365 gives you the Office apps people rely on every day, cloud storage for important files, and dependable access across desktop and mobile devices.',
+      'Choose the subscription length that fits your workflow, complete checkout securely with PayPal, and receive digital delivery details by email.',
+    ].join('\n\n');
+const descriptionHtml = renderProductMarkdownHtml(descriptionMarkdown);
+const softwareAttributes = product
+  ? Object.entries(product.attributes ?? product.meta?.attributes ?? {}).filter(
+      ([key]) =>
+        !['material', 'head style', 'number of pieces'].includes(
+          key.toLowerCase(),
+        ),
+    )
+  : [];
+
+const reviews = [
+  {
+    name: 'Emily S.',
+    place: 'Dallas, TX',
+    date: 'May 22, 2026',
+    avatar: '/comments/a1.jpg',
+    text: 'I paid almost $99.99 last year for the same license from Microsoft. This time I paid $59.99 for 3 years! Everything works perfectly and activation was smooth.',
+  },
+  {
+    name: 'Ashley N.',
+    place: 'Atlanta, GA',
+    date: 'May 21, 2026',
+    avatar: '/comments/a2.jpg',
+    text: 'Amazing value. I purchased the 5-year plan and saved over $200 compared to Microsoft’s pricing. Got the license within minutes and it activated without a hitch.',
+  },
+  {
+    name: 'Megan L.',
+    place: 'Portland, OR',
+    date: 'May 20, 2026',
+    avatar: '/comments/a3.jpg',
+    text: 'I honestly thought this was too good to be true, but I was wrong. Paid $29.99 and got my Office 365 up and running in minutes. Support was super helpful too!',
+  },
+  {
+    name: 'David K.',
+    place: 'New York, NY',
+    date: 'May 19, 2026',
+    avatar: '/comments/a4.jpg',
+    text: 'I own a small business and needed Office for my staff. These licenses saved me a ton of money and support responded instantly when I had a question. Highly recommend!',
+  },
+  {
+    name: 'Nicole J.',
+    place: 'Tampa, FL',
+    date: 'May 18, 2026',
+    avatar: '/comments/a5.jpg',
+    text: 'Best deal online for Office 365, hands down. I was helped by a support agent who guided me through setup via email. Friendly and professional.',
+  },
+  {
+    name: 'Lauren D.',
+    place: 'Minneapolis, MN',
+    date: 'May 17, 2026',
+    avatar: '/comments/a6.jpg',
+    text: 'Bought the 3-year plan for just $59.99 - activated smoothly, and they even emailed me step-by-step instructions. Service was top-notch.',
+  },
+  {
+    name: 'Brittany M.',
+    place: 'Phoenix, AZ',
+    date: 'May 16, 2026',
+    avatar: '/comments/a7.jpg',
+    text: 'I was nervous to buy from a third-party site, but I’m so glad I did. Everything works perfectly, and the price can’t be beat!',
+  },
+  {
+    name: 'Jenna R.',
+    place: 'Kansas City, MO',
+    date: 'May 15, 2026',
+    avatar: '/comments/a8.jpg',
+    text: 'Got my account in less than 5 minutes. Activated immediately. I’ll never buy full-price Office again. These guys are legit.',
+  },
+  {
+    name: 'Taylor C.',
+    place: 'Indianapolis, IN',
+    date: 'May 14, 2026',
+    avatar: '/comments/a10.jpg',
+    text: 'Using this on all my family’s devices. One-time payment and no more yearly renewals. Super convenient and way cheaper.',
+  },
+];
+
+const faqs = [
+  {
+    question: 'Is this a personal Microsoft account?',
+    answer:
+      'Yes — you will receive a personal Microsoft account (email + password). You can change the password to make the account fully personal and secure.',
+  },
+  {
+    question: 'What apps are included?',
+    answer:
+      'Full Microsoft Office apps: Word, Excel, PowerPoint, Outlook, OneNote, Publisher, Access.',
+  },
+  {
+    question: 'How many devices can I use this on?',
+    answer:
+      'You can install Office apps on up to 5 devices — PC, Mac, tablets, phones — under 1 user account.',
+  },
+  {
+    question: 'How do I activate this license?',
+    answer:
+      'You will receive a personal Microsoft account (email + password). Log in at https://www.office.com, download the apps, and install them on your devices.',
+  },
+  {
+    question: 'Is this a legal and genuine license?',
+    answer:
+      'Yes — this is a genuine Microsoft Office 365 subscription, sold by 365 DEAL with full warranty and lifetime support.',
+  },
+  {
+    question: 'Will I be able to download updates from Microsoft?',
+    answer:
+      'Yes, once activated, you can download updates from Microsoft until Microsoft no longer provides product support.',
+  },
+];
 ---
-<BaseLayout title="Products">
-  <section class="page-section">
-    <div class="section-heading">
-      <p class="eyebrow">EMS Storefront</p>
-      <h1>Products</h1>
-    </div>
 
-    {errorMessage && <div class="notice notice--error">{errorMessage}</div>}
+<BaseLayout
+  title={product
+    ? `${product.title} | 365 Deal`
+    : 'Microsoft Office 365 | 365 Deal'}
+  description="Microsoft Office 365 5 devices license with secure checkout, instant digital delivery, and multi-year subscription options."
+>
+  {
+    product ? (
+      <>
+        {heroBanner ? (
+          <section class="pb-3" aria-label="Microsoft 365 offer banner">
+            <div class="mx-auto max-w-6xl">
+              <img
+                class="w-full"
+                src={heroBanner}
+                alt={`${product.title} promotional banner`}
+                loading="eager"
+              />
+            </div>
+          </section>
+        ) : null}
 
-    {!errorMessage && products.length === 0 && (
-      <div class="notice">No products are published for this site yet.</div>
-    )}
+        {purchaseProducts ? (
+          <ProductPurchasePanel
+            mode={purchaseProducts.mode}
+            defaultKey={purchaseProducts.defaultKey}
+            initialKey={initialProductKey}
+            items={purchaseProducts.items}
+            client:load
+          />
+        ) : null}
 
-    <div class="product-grid">
-      {products.map((product) => <ProductCard product={product} />)}
-    </div>
-  </section>
+        {safeCheckoutImage ? (
+          <section class="pb-6" aria-label="Secure checkout">
+            <div class="mx-auto max-w-6xl">
+              <img
+                class="mx-auto w-[min(820px,100%)]"
+                src={safeCheckoutImage}
+                alt="Guaranteed safe checkout"
+                loading="lazy"
+              />
+            </div>
+          </section>
+        ) : null}
+
+        <section class="py-7 pb-3" id="description">
+          <div class="mx-auto max-w-6xl">
+            <h2 class="mb-3 mt-0 text-[1.55rem] font-black uppercase leading-tight text-[#111827]">
+              DESCRIPTION
+            </h2>
+            <div
+              class="grid gap-3.5 font-sans font-light text-[#1f2937] [&_a]:font-medium [&_a]:text-brand [&_blockquote]:m-0 [&_h3]:mb-0 [&_h3]:mt-2.5 [&_h3]:font-light [&_h3]:leading-tight [&_h3]:text-ink [&_h4]:mb-0 [&_h4]:mt-2.5 [&_h4]:font-light [&_h4]:leading-tight [&_h4]:text-ink [&_img]:hidden [&_ol]:m-0 [&_ol]:pl-5 [&_ol]:font-light [&_ol]:leading-relaxed [&_ol]:text-muted [&_p]:m-0 [&_p]:font-sans [&_p]:font-light [&_p]:text-base [&_p]:leading-[1.62] [&_strong]:font-light [&_table]:m-0 [&_table]:w-full [&_table]:border-collapse [&_table]:font-light [&_table]:leading-normal [&_table]:text-muted [&_td]:border-b [&_td]:border-line [&_td]:py-2.5 [&_td]:text-left [&_th]:border-b [&_th]:border-line [&_th]:py-2.5 [&_th]:text-left [&_ul]:m-0 [&_ul]:pl-5 [&_ul]:font-light [&_ul]:leading-relaxed [&_ul]:text-muted"
+              set:html={descriptionHtml}
+            />
+          </div>
+        </section>
+
+        {detailImages.length ? (
+          <section aria-label="Product detail images">
+            <div class="mx-auto grid max-w-6xl justify-items-center py-2">
+              {detailImages.map((image, index) => (
+                <img
+                  class="h-auto w-full"
+                  src={image}
+                  alt={`${product.title} detail ${index + 1}`}
+                  loading="lazy"
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {softwareAttributes.length ? (
+          <section class="pb-3 pt-3">
+            <div class="mx-auto max-w-6xl">
+              <h2 class="mb-3 mt-0 text-[1.55rem] font-black uppercase leading-tight text-[#111827]">
+                SPECIFICATIONS
+              </h2>
+              <dl class="m-0 grid border-t border-line">
+                <div class="flex justify-between gap-4 border-b border-line py-[13px]">
+                  <dt class="font-extrabold text-muted">Product</dt>
+                  <dd class="m-0 text-right [overflow-wrap:anywhere]">
+                    {product.title}
+                  </dd>
+                </div>
+                <div class="flex justify-between gap-4 border-b border-line py-[13px]">
+                  <dt class="font-extrabold text-muted">Delivery</dt>
+                  <dd class="m-0 text-right [overflow-wrap:anywhere]">
+                    Digital delivery by email after payment confirmation
+                  </dd>
+                </div>
+                {softwareAttributes.map(([key, value]) => (
+                  <div class="flex justify-between gap-4 border-b border-line py-[13px]">
+                    <dt class="font-extrabold text-muted">{key}</dt>
+                    <dd class="m-0 text-right [overflow-wrap:anywhere]">
+                      {value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </section>
+        ) : null}
+
+        <section class="py-7 pb-[34px]" id="faq">
+          <div class="mx-auto max-w-6xl">
+            <details
+              class="bg-white [&:not([open])_summary]:pb-2 [&:not([open])_summary:after]:border-b-0 [&:not([open])_summary:after]:border-t-[5px] [&:not([open])_summary:after]:border-t-[#737373]"
+              open
+            >
+              <summary class="relative flex cursor-pointer list-none items-center justify-between pb-[34px] pt-2 font-serif text-base font-bold text-[#2b2b2b] after:h-0 after:w-0 after:border-b-[5px] after:border-l-4 after:border-r-4 after:border-b-[#737373] after:border-l-transparent after:border-r-transparent after:content-[''] [&::-webkit-details-marker]:hidden">
+                <span>Frequently Asked Questions</span>
+              </summary>
+              <div class="grid grid-cols-3 gap-x-[68px] gap-y-[76px] pb-3 max-[760px]:grid-cols-1">
+                {faqs.map((item) => (
+                  <article class="min-w-0">
+                    <h3 class="mb-4 mt-0 font-serif text-l font-extrabold leading-[1.18] text-[#111827]">
+                      {item.question}
+                    </h3>
+                    <p class="m-0 text-base leading-[1.75] text-[#374151]">
+                      {item.answer}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            </details>
+          </div>
+        </section>
+
+        <section class="py-7">
+          <div class="mx-auto max-w-6xl">
+            <h2 class="mb-3 mt-0 text-center text-[1.55rem] font-black leading-tight text-[#111827]">
+              Customer Reviews
+            </h2>
+            <div class="grid grid-cols-1 gap-4">
+              {reviews.map((review, index) => (
+                <article
+                  class="rounded-xl border border-[#e1e1e1] bg-white px-4 py-4 shadow-[0_2px_5px_rgba(0,0,0,0.08)]"
+                  data-review-card
+                  hidden={index >= 3}
+                >
+                  <div class="mb-2 flex items-center gap-3">
+                    <img
+                      class="h-12 w-12 shrink-0 rounded-full object-cover"
+                      src={review.avatar}
+                      alt={`${review.name} avatar`}
+                      loading="lazy"
+                    />
+                    <span class="text-sm text-[#3f3f46]">
+                      {review.name} – {review.place}
+                    </span>
+                  </div>
+                  <div class="text-[#f5b400]" aria-label="5 out of 5 stars">
+                    ★★★★★
+                  </div>
+                  <time
+                    class="block text-[0.86rem] text-[#4b5563]"
+                    datetime={new Date(review.date).toISOString().slice(0, 10)}
+                  >
+                    {review.date}
+                  </time>
+                  <p class="mb-0 mt-2 text-base leading-relaxed text-[#111827]">
+                    “{review.text}”
+                  </p>
+                </article>
+              ))}
+            </div>
+            <div class="pt-6 text-center">
+              <button
+                class="cursor-pointer border-0 bg-transparent p-0 text-sm text-[#737373]"
+                type="button"
+                data-review-more
+              >
+                Read More
+              </button>
+            </div>
+          </div>
+        </section>
+      </>
+    ) : (
+      <section class="grid min-h-[62vh] place-items-center px-4 py-12">
+        <div class="max-w-[620px] rounded-brand border border-line bg-white p-8 shadow-soft-card">
+          <p class="mb-3.5 mt-0 text-[0.78rem] font-extrabold uppercase tracking-[0.08em] text-brand">
+            Product unavailable
+          </p>
+          <h1 class="mb-3 mt-0 text-[clamp(2rem,7vw,4rem)] leading-none">
+            Product details are temporarily unavailable.
+          </h1>
+          <p class="text-muted leading-relaxed">
+            Please refresh the page in a moment. If the issue continues, contact
+            support and we will help you complete your order.
+          </p>
+          {import.meta.env.DEV && loadError ? (
+            <p class="text-muted leading-relaxed">
+              Development detail: {loadError}
+            </p>
+          ) : null}
+        </div>
+      </section>
+    )
+  }
+  <script>
+    const reviewCards = Array.from(
+      document.querySelectorAll('[data-review-card]'),
+    );
+    const reviewMoreButton = document.querySelector('[data-review-more]');
+    let visibleReviews = 3;
+
+    if (reviewMoreButton) {
+      reviewMoreButton.addEventListener('click', function () {
+        visibleReviews += 3;
+
+        reviewCards.forEach(function (card, index) {
+          card.toggleAttribute('hidden', index >= visibleReviews);
+        });
+
+        if (visibleReviews >= reviewCards.length) {
+          reviewMoreButton.setAttribute('hidden', '');
+        }
+      });
+    }
+  </script>
 </BaseLayout>

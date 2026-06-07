@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { input, password, select } from "@inquirer/prompts";
-import type { DeploymentTarget, FrontendMode, StorefrontTemplate } from "./validators.js";
-import { inspectTargetDirectory, validateCaddyDomains, validateDomain, validateProjectName } from "./validators.js";
+import type { DeploymentTarget, StorefrontTemplate } from "./validators.js";
+import { inspectTargetDirectory, validateCaddyDomains, validateProjectName } from "./validators.js";
 import { resolveCommerceApiBaseUrl } from "./user-config.js";
 
 export interface CliOptions {
@@ -11,7 +11,6 @@ export interface CliOptions {
   cloudflareApiToken?: string;
   commerceApiBaseUrl?: string;
   template?: StorefrontTemplate;
-  mode?: FrontendMode;
   deploy?: DeploymentTarget;
   yes?: boolean;
 }
@@ -23,7 +22,6 @@ export interface StorefrontAnswers {
   commerceApiToken: string;
   commerceApiBaseUrl: string;
   siteDomain: string;
-  frontendMode: FrontendMode;
   deploymentTarget: DeploymentTarget;
   cloudflare: CloudflareAnswers;
   vps: VpsAnswers;
@@ -65,40 +63,21 @@ export async function collectAnswers(projectNameArg: string | undefined, options
     ]
   }));
 
-  const frontendMode = template === "multi-product"
-    ? "ssr"
-    : options.mode ?? (options.yes ? "ssr" : await select<FrontendMode>({
-    message: "How should the frontend render?",
-    default: "ssr",
-    choices: [
-      { name: "SSR - server-rendered storefront, can use EMS server token", value: "ssr" },
-      { name: "Static - prebuilt pages, public API only", value: "static" }
-    ]
-  }));
-
-  const siteDomain = await collectSiteDomain(template, cleanProjectName, options);
+  const siteDomain = resolveSiteDomain(cleanProjectName, options);
   const commerceApiToken = await collectCommerceApiToken(template, options);
   const commerceApiBaseUrl = await resolveCommerceApiBaseUrl(options.commerceApiBaseUrl);
 
-  const defaultDeployTarget = template === "multi-product" ? "cloudflare-workers" : "vps";
-  const deploymentChoices = template === "multi-product"
-    ? [
-      { name: "Cloudflare - generate Wrangler config and deploy script", value: "cloudflare-workers" as const },
-      { name: "VPS - generate npm run deploy with PM2 and Caddy bootstrap", value: "vps" as const },
-      { name: "None - local project only", value: "none" as const }
-    ]
-    : [
-      { name: "VPS - generate npm run deploy with PM2 and Caddy bootstrap", value: "vps" as const },
-      { name: "None - local project only", value: "none" as const }
-    ];
+  const defaultDeployTarget = "cloudflare-workers";
+  const deploymentChoices = [
+    { name: "Cloudflare - generate Wrangler config and deploy script", value: "cloudflare-workers" as const },
+    { name: "VPS - generate npm run deploy with PM2 and Caddy bootstrap", value: "vps" as const },
+    { name: "None - local project only", value: "none" as const }
+  ];
   const deploymentTarget = options.deploy ?? (options.yes ? defaultDeployTarget : await select<DeploymentTarget>({
     message: "Where do you want to deploy?",
     default: defaultDeployTarget,
     choices: deploymentChoices
   }));
-  if (template === "single-product" && deploymentTarget === "cloudflare-workers") {
-    throw new Error("Cloudflare deploy is not available for the single-product template yet.");
-  }
 
   const cloudflare = deploymentTarget === "cloudflare-workers" && !options.yes
     ? await collectCloudflareAnswers(options)
@@ -114,33 +93,17 @@ export async function collectAnswers(projectNameArg: string | undefined, options
     commerceApiToken,
     commerceApiBaseUrl,
     siteDomain: siteDomain.trim(),
-    frontendMode,
     deploymentTarget,
     cloudflare,
     vps
   };
 }
 
-async function collectSiteDomain(
-  template: StorefrontTemplate,
-  projectName: string,
-  options: CliOptions
-): Promise<string> {
+function resolveSiteDomain(projectName: string, options: CliOptions): string {
   if (options.site !== undefined) {
     return options.site.trim();
   }
-  if (template === "multi-product") {
-    return inferDomainFromProjectName(projectName);
-  }
-  if (options.yes) {
-    return "example.com";
-  }
-
-  return await input({
-    message: "EMS site domain",
-    default: "example.com",
-    validate: validateDomain
-  });
+  return inferDomainFromProjectName(projectName);
 }
 
 async function collectCommerceApiToken(
@@ -150,17 +113,17 @@ async function collectCommerceApiToken(
   if (options.token !== undefined) {
     return options.token.trim();
   }
-  if (options.yes || template !== "multi-product") {
+  if (options.yes) {
     return "";
   }
 
   return await password({
-    message: "EMS commerce API token",
+    message: "EMS commerce API secret key (sk)",
     mask: "*",
     validate: (value) => {
       const token = value.trim();
-      if (!token) return "EMS commerce API token is required for this template.";
-      if (/[\r\n]/.test(token)) return "EMS commerce API token must be a single line.";
+      if (!token) return "EMS commerce API secret key is required for this template.";
+      if (/[\r\n]/.test(token)) return "EMS commerce API secret key must be a single line.";
       return true;
     }
   });

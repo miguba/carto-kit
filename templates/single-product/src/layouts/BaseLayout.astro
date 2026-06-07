@@ -1,30 +1,128 @@
 ---
-import "../styles/global.css";
+import '@/styles/global.css';
 
-interface Props {
+type Props = {
   title: string;
   description?: string;
-}
+  checkoutOnly?: boolean;
+};
 
-const { title, description = "Self-hosted Carto storefront" } = Astro.props;
+const {
+  title,
+  description = '365 Deal — Microsoft 365 digital subscriptions and secure checkout.',
+  checkoutOnly = false,
+} = Astro.props;
 ---
+
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="description" content={description} />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="generator" content={Astro.generator} />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <meta name="theme-color" content="#2563eb" />
     <title>{title}</title>
   </head>
   <body>
-    <header class="site-header">
-      <a class="brand" href="/">Carto</a>
-      <nav>
-        <a href="/">Products</a>
-      </nav>
-    </header>
-    <main>
-      <slot />
-    </main>
+    <div class="min-h-screen">
+      {
+        checkoutOnly ? null : (
+          <header class="bg-transparent">
+            <a
+              class="block bg-[#1673b1] text-white! text-center text-base font-extralight py-1"
+              href="/#buy"
+            >
+              Claim Your Flash Deal - Up To 50% Off Today!
+            </a>
+
+            <nav
+              class="mx-auto flex min-h-[92px] w-[calc(100%-32px)] max-w-6xl items-center justify-center gap-4 max-[760px]:min-h-[76px] py-5"
+              aria-label="Main navigation"
+            >
+              <a
+                class="inline-flex items-center no-underline"
+                href="/"
+                aria-label="365 Deal home"
+              >
+                <img
+                  class="h-auto w-[252px] object-contain max-[760px]:w-[190px]"
+                  src="/ms365-logo.png"
+                  alt="365 Deal"
+                />
+              </a>
+              <div class="hidden" aria-label="Page sections">
+                <a href="/">Home</a>
+                <a href="/#description">Description</a>
+                <a href="/#faq">FAQ</a>
+              </div>
+            </nav>
+          </header>
+        )
+      }
+
+      <main class="wrap">
+        <slot />
+      </main>
+
+      <footer
+        class="bg-white py-7 text-center font-rl pt-12"
+        aria-label="Footer"
+      >
+        <div class="mx-auto grid w-[calc(100%-32px)] max-w-6xl gap-[22px]">
+          <div
+            class="flex items-center justify-center gap-1.5 text-sm leading-none"
+          >
+            <img
+              class="h-[14px] w-[14px] object-contain"
+              src="/favicon.ico"
+              alt=""
+              aria-hidden="true"
+            />
+            <span class="font-rm text-[#555]">Powered by</span>
+            <span class="text-[#111]">365 DEAL</span>
+          </div>
+          <nav
+            class="flex flex-wrap justify-center gap-x-[18px] gap-y-2 text-sm leading-[1.2]"
+            aria-label="Footer links"
+          >
+            <a
+              class="font-normal text-[#7a7a7a] no-underline hover:text-[#0b67a3] hover:underline"
+              href="/"
+            >
+              Home
+            </a>
+            <a
+              class="font-normal text-[#7a7a7a] no-underline hover:text-[#0b67a3] hover:underline"
+              href="/cancellation-refund-policy"
+            >
+              Cancellation &amp; Refund Policy
+            </a>
+            <a
+              class="font-normal text-[#7a7a7a] no-underline hover:text-[#0b67a3] hover:underline"
+              href="/privacy-policy"
+            >
+              Privacy Policy
+            </a>
+            <a
+              class="font-normal text-[#7a7a7a] no-underline hover:text-[#0b67a3] hover:underline"
+              href="/terms-conditions"
+            >
+              Terms &amp; Conditions
+            </a>
+            <a
+              class="font-normal text-[#7a7a7a] no-underline hover:text-[#0b67a3] hover:underline"
+              href="/contact-us"
+            >
+              Contact us
+            </a>
+          </nav>
+          <p class="m-0 text-xs leading-[1.2] text-[#7a7a7a]">
+            &copy; 2025 ICE DOT 98 LIMITED. All Rights Reserved.
+          </p>
+        </div>
+      </footer>
+    </div>
   </body>
 </html>

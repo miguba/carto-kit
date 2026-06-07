@@ -28,10 +28,11 @@ const sshArgs = ["-p", port];
 if (key) sshArgs.push("-i", key);
 const scpArgs = ["-P", port];
 if (key) scpArgs.push("-i", key);
-const sshControlPath = join(tmpdir(), `carto-ssh-${process.pid}-%r@%h:%p`);
+const sshControlPath = join(tmpdir(), `carto-${process.pid}.sock`);
 const sshControlArgs = [
   "-o", "ControlMaster=auto",
   "-o", "ControlPersist=10m",
+  "-o", "StreamLocalBindUnlink=yes",
   "-o", `ControlPath=${sshControlPath}`
 ];
 sshArgs.push(...sshControlArgs);
@@ -166,11 +167,11 @@ function shellQuote(value) {
 
 function buildRuntimeEnv() {
   const allowed = [
-    "EMS_SITE_DOMAIN",
-    "PUBLIC_SITE_URL",
-    "PRODUCT_DETAIL_URL_TEMPLATE",
+    "APP_NAME",
+    "APP_ENV",
+    "COMMERCE_API_TOKEN",
+    "PUBLIC_MAPBOX_ACCESS_TOKEN",
     "EMS_SERVER_APP_TOKEN",
-    "FRONTEND_MODE"
   ];
   const lines = ["NODE_ENV=production"];
   for (const key of allowed) {

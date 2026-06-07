@@ -1,11 +1,9 @@
 /// <reference path="../.astro/types.d.ts" />
+/// <reference types="astro/client" />
 
 interface ImportMetaEnv {
-  readonly EMS_SITE_DOMAIN: string;
-  readonly PUBLIC_SITE_URL: string;
-  readonly PRODUCT_DETAIL_URL_TEMPLATE: string;
-  readonly EMS_SERVER_APP_TOKEN?: string;
-  readonly FRONTEND_MODE?: "ssr" | "static";
+  readonly PUBLIC_COMMERCE_API_BASE_URL?: string;
+  readonly PUBLIC_MAPBOX_ACCESS_TOKEN?: string;
 }
 
 interface ImportMeta {
