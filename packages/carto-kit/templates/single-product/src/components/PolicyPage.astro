@@ -42,13 +42,13 @@ function slugify(value: string) {
 }
 ---
 
-<section class="overflow-hidden bg-[linear-gradient(135deg,rgba(35,100,232,0.13),transparent_38%),linear-gradient(180deg,#f7f9ff_0%,#ffffff_100%)] py-[72px] pb-[54px] max-[900px]:pt-[54px] max-[575px]:py-11 max-[575px]:pb-[38px]">
-  <div class="mx-auto grid w-[min(1120px,calc(100%-32px))] grid-cols-[minmax(0,1fr)_minmax(300px,0.42fr)] items-end gap-[34px] max-[900px]:grid-cols-1 max-[900px]:items-start">
+<section class="relative ml-[calc(50%-50vw)] w-screen overflow-hidden border-y border-line/70 bg-[linear-gradient(180deg,#f8fafc_0%,#eef3f8_100%)] py-[clamp(44px,6vw,68px)]">
+  <div class="mx-auto grid w-[min(1120px,calc(100%-40px))] grid-cols-[minmax(0,1fr)_minmax(300px,0.42fr)] items-center gap-[34px] max-[900px]:grid-cols-1 max-[900px]:items-start">
     <div>
       <p class="mb-3.5 mt-0 text-[0.78rem] font-extrabold uppercase tracking-[0.08em] text-brand">{eyebrow}</p>
       <h1 class="m-0 max-w-[860px] text-[clamp(3rem,7vw,6.4rem)] leading-[0.9] max-[575px]:text-[clamp(2.4rem,15vw,4rem)]">{title}</h1>
       <p class="mt-[22px] max-w-[760px] text-[clamp(1.05rem,1.8vw,1.24rem)] leading-[1.68] text-muted">{intro}</p>
-      <span class="mt-6 inline-flex rounded-full bg-white px-3 py-[9px] text-[0.86rem] font-extrabold text-muted shadow-[0_12px_34px_rgba(18,19,22,0.06)]">Last updated: {updated}</span>
+      <span class="mt-6 inline-flex rounded-full border border-white/70 bg-white/80 px-3 py-[9px] text-[0.86rem] font-extrabold text-muted shadow-[0_12px_34px_rgba(18,19,22,0.05)]">Last updated: {updated}</span>
     </div>
     <aside class="rounded-brand border border-line bg-white/90 p-6 shadow-[0_24px_80px_rgba(18,19,22,0.08)] max-[575px]:p-[18px]" aria-label="Policy support information">
       <p class="mb-3.5 mt-0 text-[0.78rem] font-extrabold uppercase tracking-[0.08em] text-brand">Customer Care</p>
@@ -90,7 +90,7 @@ function slugify(value: string) {
             <h2 class="m-0 text-[clamp(1.55rem,3vw,2.35rem)] leading-[1.08]">{section.title}</h2>
             {section.body ? <p class="mt-3.5 text-base leading-[1.72] text-muted">{section.body}</p> : null}
             {section.items?.length ? (
-              <ul class="mt-4 grid gap-2.5 pl-5 marker:text-brand">
+              <ul class="mt-4 grid list-disc gap-2.5 pl-5 marker:text-brand marker:text-[0.82em]">
                 {section.items.map((item) => <li class="text-base leading-[1.72] text-muted">{item}</li>)}
               </ul>
             ) : null}

@@ -19,10 +19,12 @@ const initialProductKey = Astro.url.searchParams.get('product') ?? '';
 let purchaseProducts: Awaited<ReturnType<typeof getPurchaseProducts>> | null =
   null;
 let product: Product | null = null;
+let mediaBaseUrl = '';
 let loadError = '';
 
 try {
-  await getCommerceConfigFromServer();
+  const commerceConfig = await getCommerceConfigFromServer();
+  mediaBaseUrl = commerceConfig.media?.cdnBaseUrl ?? '';
   purchaseProducts = await getPurchaseProducts();
   const selectedItem =
     purchaseProducts.items.find((item) => item.key === initialProductKey) ??
@@ -46,15 +48,17 @@ const contentImages = product?.content
 const contentWithoutImages = product?.content
   ? removeProductContentImages(product.content)
   : '';
-const productMediaImages = product ? productImages(product) : [];
+const productMediaImages = product
+  ? productImages(product, null, mediaBaseUrl)
+  : [];
 const mainProductImage = product?.mainImage
-  ? normalizeImageUrl(product.mainImage)
+  ? normalizeImageUrl(product.mainImage, mediaBaseUrl)
   : '';
 const productDecoration =
   product?.decoration ?? product?.meta?.decoration ?? null;
 const decorationImages =
   productDecoration?.pics
-    ?.map((image) => normalizeImageUrl(image))
+    ?.map((image) => normalizeImageUrl(image, mediaBaseUrl))
     .filter(Boolean) ?? [];
 const galleryImages = product
   ? Array.from(
@@ -232,6 +236,7 @@ const faqs = [
             defaultKey={purchaseProducts.defaultKey}
             initialKey={initialProductKey}
             items={purchaseProducts.items}
+            mediaBaseUrl={mediaBaseUrl}
             client:load
           />
         ) : null}

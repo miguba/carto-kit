@@ -22,6 +22,7 @@ import {
   normalizeImageUrl,
   optimizedImageUrl,
   productImages,
+  productSellingPoints,
   productTrustSignals,
   productVideo,
 } from "@/lib/format";
@@ -111,7 +112,7 @@ export default function ProductPurchasePanel({ product, mediaConfig }: Props) {
     ],
     [images, video],
   );
-  const sellingPoints = (product.sellingPoints ?? [])
+  const sellingPoints = productSellingPoints(product)
     .map((point) => point.trim())
     .filter(Boolean);
   const activeMedia = mediaItems[activeImage] ?? mediaItems[0];

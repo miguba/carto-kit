@@ -3,20 +3,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const nodeEnv = process.env.NODE_ENV || 'development';
-const envFiles = ['.env', `.env.${nodeEnv}`].filter((file, index, files) => files.indexOf(file) === index);
+const envFiles = ['.env', `.env.${nodeEnv}`].filter(
+  (file, index, files) => files.indexOf(file) === index,
+);
 
 for (const file of envFiles) {
   loadEnvFile(path.resolve(file));
 }
 
 const appName = normalizeWorkerName(requiredEnv('APP_NAME'));
-const publicVars = pickEnvVars([
-  'APP_NAME',
-  'PUBLIC_MAPBOX_ACCESS_TOKEN',
-]);
-const serverVars = pickEnvVars([
-  'COMMERCE_API_TOKEN',
-]);
+const publicVars = pickEnvVars(['APP_NAME', 'PUBLIC_MAPBOX_ACCESS_TOKEN']);
+const serverVars = pickEnvVars(['COMMERCE_API_TOKEN']);
 
 const cfg = {
   $schema: './node_modules/wrangler/config-schema.json',
@@ -89,10 +86,12 @@ function requiredEnv(key: string): string {
 }
 
 function pickEnvVars(keys: string[]): Record<string, string> {
-  return Object.fromEntries(keys.flatMap((key) => {
-    const value = process.env[key];
-    return value ? [[key, value]] : [];
-  }));
+  return Object.fromEntries(
+    keys.flatMap((key) => {
+      const value = process.env[key];
+      return value ? [[key, value]] : [];
+    }),
+  );
 }
 
 function normalizeWorkerName(value: string): string {

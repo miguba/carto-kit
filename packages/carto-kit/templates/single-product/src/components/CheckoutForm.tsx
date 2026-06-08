@@ -7,6 +7,7 @@ import {
   PayPalNumberField,
   PayPalScriptProvider,
   usePayPalCardFields,
+  usePayPalScriptReducer,
 } from '@paypal/react-paypal-js';
 import {
   AlertCircle,
@@ -1361,168 +1362,171 @@ export default function CheckoutForm({
                   intent: 'capture',
                 }}
               >
-                <div>
-                  <div className="mb-[18px] flex items-center justify-between gap-3 text-base font-extrabold text-ink">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span
-                        className="inline-grid h-[19px] w-[19px] flex-none place-items-center rounded-full border-[6px] border-brand bg-white"
-                        aria-hidden="true"
-                      />
-                      <div className="grid gap-[3px]">
-                        <strong>Credit / Debit Card</strong>
-                        <small className="text-[0.78rem] font-bold leading-tight text-[#667085]">
-                          Encrypted card payment by PayPal
-                        </small>
+                <PayPalScriptGate fallback={<PayPalPaymentSkeleton />}>
+                  <div>
+                    <div className="mb-[18px] flex items-center justify-between gap-3 text-base font-extrabold text-ink">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span
+                          className="inline-grid h-[19px] w-[19px] flex-none place-items-center rounded-full border-[6px] border-brand bg-white"
+                          aria-hidden="true"
+                        />
+                        <div className="grid gap-[3px]">
+                          <strong>Credit / Debit Card</strong>
+                          <small className="text-[0.78rem] font-bold leading-tight text-[#667085]">
+                            Encrypted card payment by PayPal
+                          </small>
+                        </div>
+                      </div>
+                      <div
+                        className="flex flex-wrap items-center justify-end gap-[5px]"
+                        aria-label="Accepted card types"
+                      >
+                        <VisaLogo />
+                        <MastercardLogo />
+                        <AmexLogo />
                       </div>
                     </div>
-                    <div
-                      className="flex flex-wrap items-center justify-end gap-[5px]"
-                      aria-label="Accepted card types"
-                    >
-                      <VisaLogo />
-                      <MastercardLogo />
-                      <AmexLogo />
-                    </div>
-                  </div>
 
-                  {cardFieldsEligible ? (
-                    <PayPalCardFieldsProvider
-                      createOrder={async () => {
-                        setPaymentMethod('paypal-card');
-                        return preparePayment('paypal-card');
-                      }}
-                      onApprove={async (data) => {
-                        await capture(
-                          String(
-                            data.orderID || payment?.providerOrderId || '',
-                          ),
-                        );
-                      }}
-                      onError={(caught) => {
-                        setState(
-                          payment?.providerOrderId ? 'ready' : 'editing',
-                        );
-                        setError(
-                          caught instanceof Error
-                            ? caught.message
-                            : 'PayPal card payment could not be completed.',
-                        );
-                      }}
-                    >
-                      <div className="grid gap-0.5">
-                        <div className="grid min-w-0">
-                          <div className="min-h-[46px] overflow-hidden bg-transparent p-0 [&_iframe]:block [&_iframe]:min-h-[46px]">
-                            <PayPalNameField
-                              placeholder="Full name on card"
-                              style={paypalCardFieldStyle}
-                            />
-                          </div>
-                        </div>
-                        <div className="grid min-w-0">
-                          <div className="min-h-[46px] overflow-hidden bg-transparent p-0 [&_iframe]:block [&_iframe]:min-h-[46px]">
-                            <PayPalNumberField
-                              placeholder="0000 0000 0000 0000"
-                              style={paypalCardFieldStyle}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-[1fr_0.72fr] gap-0.5 max-[760px]:grid-cols-1">
+                    {cardFieldsEligible ? (
+                      <PayPalCardFieldsProvider
+                        createOrder={async () => {
+                          setPaymentMethod('paypal-card');
+                          return preparePayment('paypal-card');
+                        }}
+                        onApprove={async (data) => {
+                          await capture(
+                            String(
+                              data.orderID || payment?.providerOrderId || '',
+                            ),
+                          );
+                        }}
+                        onError={(caught) => {
+                          setState(
+                            payment?.providerOrderId ? 'ready' : 'editing',
+                          );
+                          setError(
+                            caught instanceof Error
+                              ? caught.message
+                              : 'PayPal card payment could not be completed.',
+                          );
+                        }}
+                      >
+                        <div className="grid gap-0.5">
                           <div className="grid min-w-0">
                             <div className="min-h-[46px] overflow-hidden bg-transparent p-0 [&_iframe]:block [&_iframe]:min-h-[46px]">
-                              <PayPalExpiryField
-                                placeholder="MM / YY"
+                              <PayPalNameField
+                                placeholder="Full name on card"
                                 style={paypalCardFieldStyle}
                               />
                             </div>
                           </div>
                           <div className="grid min-w-0">
                             <div className="min-h-[46px] overflow-hidden bg-transparent p-0 [&_iframe]:block [&_iframe]:min-h-[46px]">
-                              <PayPalCVVField
-                                placeholder="•••"
+                              <PayPalNumberField
+                                placeholder="0000 0000 0000 0000"
                                 style={paypalCardFieldStyle}
                               />
                             </div>
                           </div>
+
+                          <div className="grid grid-cols-[1fr_0.72fr] gap-0.5 max-[760px]:grid-cols-1">
+                            <div className="grid min-w-0">
+                              <div className="min-h-[46px] overflow-hidden bg-transparent p-0 [&_iframe]:block [&_iframe]:min-h-[46px]">
+                                <PayPalExpiryField
+                                  placeholder="MM / YY"
+                                  style={paypalCardFieldStyle}
+                                />
+                              </div>
+                            </div>
+                            <div className="grid min-w-0">
+                              <div className="min-h-[46px] overflow-hidden bg-transparent p-0 [&_iframe]:block [&_iframe]:min-h-[46px]">
+                                <PayPalCVVField
+                                  placeholder="•••"
+                                  style={paypalCardFieldStyle}
+                                />
+                              </div>
+                            </div>
+                          </div>
                         </div>
+                        <PayPalCardSubmitButton
+                          disabled={
+                            state === 'creating' ||
+                            state === 'capturing' ||
+                            !acceptedTerms
+                          }
+                          onBeforeSubmit={validateDetails}
+                        />
+                        <p className="mt-5 flex items-center justify-center gap-[7px] text-[0.78rem] font-bold leading-snug text-[#667085]">
+                          <LockKeyhole
+                            className="shrink-0 text-success"
+                            size={14}
+                          />
+                          Your card details are handled inside PayPal secure
+                          fields.
+                        </p>
+                      </PayPalCardFieldsProvider>
+                    ) : (
+                      <div className="paypal-card-fallback-simple">
+                        <p>
+                          Secure credit card checkout is processed through
+                          PayPal. <strong>No PayPal account is required</strong>{' '}
+                          — simply click the PayPal button below to pay with
+                          your Credit or Debit Card.
+                        </p>
                       </div>
-                      <PayPalCardSubmitButton
+                    )}
+
+                    <div style={{ display: 'none' }} aria-hidden="true">
+                      <PayPalCardFieldsProvider
+                        createOrder={async () => ''}
+                        onApprove={async () => {}}
+                        onError={() => {}}
+                      >
+                        <PayPalCardFieldsReady
+                          onReady={() => setCardFieldsEligible(true)}
+                        />
+                      </PayPalCardFieldsProvider>
+                    </div>
+
+                    <div className="my-[22px] mb-[18px] flex items-center text-center text-[0.86rem] font-extrabold uppercase tracking-[0.05em] text-[#667085] before:mr-4 before:flex-1 before:border-b before:border-line before:content-[''] after:ml-4 after:flex-1 after:border-b after:border-line after:content-['']">
+                      <span>OR</span>
+                    </div>
+
+                    <div className="mt-2.5">
+                      <PayPalButtons
                         disabled={
                           state === 'creating' ||
                           state === 'capturing' ||
                           !acceptedTerms
                         }
-                        onBeforeSubmit={validateDetails}
+                        fundingSource="paypal"
+                        createOrder={async () => {
+                          setPaymentMethod('paypal');
+                          return preparePayment('paypal');
+                        }}
+                        onApprove={async (data) => {
+                          await capture(
+                            String(
+                              data.orderID || payment?.providerOrderId || '',
+                            ),
+                          );
+                        }}
+                        onError={(caught) => {
+                          setError(
+                            caught instanceof Error
+                              ? caught.message
+                              : 'PayPal could not complete approval.',
+                          );
+                        }}
+                        style={{
+                          layout: 'vertical',
+                          shape: 'rect',
+                          label: 'pay',
+                        }}
                       />
-                      <p className="mt-5 flex items-center justify-center gap-[7px] text-[0.78rem] font-bold leading-snug text-[#667085]">
-                        <LockKeyhole
-                          className="shrink-0 text-success"
-                          size={14}
-                        />
-                        Your card details are handled inside PayPal secure
-                        fields.
-                      </p>
-                    </PayPalCardFieldsProvider>
-                  ) : (
-                    <div className="paypal-card-fallback-simple">
-                      <p>
-                        Secure credit card checkout is processed through PayPal.{' '}
-                        <strong>No PayPal account is required</strong> — simply
-                        click the PayPal button below to pay with your Credit or
-                        Debit Card.
-                      </p>
                     </div>
-                  )}
-
-                  {/* 隐藏探测组件，静默挂载以改变 cardFieldsEligible 状态 */}
-                  <div style={{ display: 'none' }} aria-hidden="true">
-                    <PayPalCardFieldsProvider
-                      createOrder={async () => ''}
-                      onApprove={async () => {}}
-                      onError={() => {}}
-                    >
-                      <PayPalCardFieldsReady
-                        onReady={() => setCardFieldsEligible(true)}
-                      />
-                    </PayPalCardFieldsProvider>
                   </div>
-                </div>
-
-                <div className="my-[22px] mb-[18px] flex items-center text-center text-[0.86rem] font-extrabold uppercase tracking-[0.05em] text-[#667085] before:mr-4 before:flex-1 before:border-b before:border-line before:content-[''] after:ml-4 after:flex-1 after:border-b after:border-line after:content-['']">
-                  <span>OR</span>
-                </div>
-
-                <div className="mt-2.5">
-                  <PayPalButtons
-                    disabled={
-                      state === 'creating' ||
-                      state === 'capturing' ||
-                      !acceptedTerms
-                    }
-                    fundingSource="paypal"
-                    createOrder={async () => {
-                      setPaymentMethod('paypal');
-                      return preparePayment('paypal');
-                    }}
-                    onApprove={async (data) => {
-                      await capture(
-                        String(data.orderID || payment?.providerOrderId || ''),
-                      );
-                    }}
-                    onError={(caught) => {
-                      setError(
-                        caught instanceof Error
-                          ? caught.message
-                          : 'PayPal could not complete approval.',
-                      );
-                    }}
-                    style={{
-                      layout: 'vertical',
-                      shape: 'rect',
-                      label: 'pay',
-                    }}
-                  />
-                </div>
+                </PayPalScriptGate>
               </PayPalScriptProvider>
             ) : (
               <p className="flex items-start gap-2 rounded-brand border border-red-200 bg-red-50 p-3 text-sm font-bold leading-snug text-red-900">
@@ -1604,6 +1608,64 @@ export default function CheckoutForm({
           </section>
         </aside>
       </div>
+    </div>
+  );
+}
+
+function PayPalScriptGate({
+  children,
+  fallback,
+}: {
+  children: ReactNode;
+  fallback: ReactNode;
+}) {
+  const [{ isResolved }] = usePayPalScriptReducer();
+
+  return isResolved ? children : fallback;
+}
+
+function PayPalPaymentSkeleton() {
+  return (
+    <div
+      className="grid gap-[18px]"
+      aria-busy="true"
+      aria-label="Loading secure payment controls"
+      role="status"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            className="h-[19px] w-[19px] flex-none rounded-full border-[6px] border-[#d7dce5] bg-white"
+            aria-hidden="true"
+          />
+          <div className="grid min-w-[190px] gap-[7px]">
+            <span className="h-4 w-[178px] max-w-full animate-pulse rounded bg-[#e7ebf1]" />
+            <span className="h-3 w-[210px] max-w-full animate-pulse rounded bg-[#eef1f5]" />
+          </div>
+        </div>
+        <div className="flex flex-none gap-[5px]" aria-hidden="true">
+          <span className="h-5 w-9 animate-pulse rounded-[3px] bg-[#e7ebf1]" />
+          <span className="h-5 w-9 animate-pulse rounded-[3px] bg-[#e7ebf1]" />
+          <span className="h-5 w-9 animate-pulse rounded-[3px] bg-[#e7ebf1]" />
+        </div>
+      </div>
+
+      <div className="grid gap-0.5">
+        <span className="h-[46px] animate-pulse rounded-[4px] bg-[#eef1f5]" />
+        <span className="h-[46px] animate-pulse rounded-[4px] bg-[#eef1f5]" />
+        <div className="grid grid-cols-[1fr_0.72fr] gap-0.5 max-[760px]:grid-cols-1">
+          <span className="h-[46px] animate-pulse rounded-[4px] bg-[#eef1f5]" />
+          <span className="h-[46px] animate-pulse rounded-[4px] bg-[#eef1f5]" />
+        </div>
+      </div>
+
+      <span className="h-[54px] animate-pulse rounded-[7px] bg-[#dfe7f4]" />
+      <div className="flex items-center gap-4 text-center text-[0.86rem] font-extrabold uppercase tracking-[0.05em] text-[#8a94a6]">
+        <span className="h-px flex-1 bg-line" />
+        <span>OR</span>
+        <span className="h-px flex-1 bg-line" />
+      </div>
+      <span className="h-[48px] animate-pulse rounded-[4px] bg-[#eef1f5]" />
     </div>
   );
 }

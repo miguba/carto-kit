@@ -72,6 +72,7 @@ export function productImages(product: Product, selectedVariant?: ProductVariant
     product.mainImage,
     ...product.galleryImages,
     ...(product.decoration?.pics ?? []),
+    ...(product.meta?.decoration?.pics ?? []),
   ]
     .map((url) => (typeof url === 'string' ? normalizeImageUrl(url) : ''))
     .filter(Boolean);
@@ -81,6 +82,41 @@ export function productImages(product: Product, selectedVariant?: ProductVariant
 
 export function productVideo(product: Product) {
   return normalizeMediaUrl(product.video ?? product.videoUrl ?? product.video_url ?? product.meta?.video ?? product.meta?.videoUrl ?? product.meta?.video_url ?? '');
+}
+
+export function productSellingPoints(product: Product) {
+  return product.sellingPoints
+    ?? product.selling_points
+    ?? product.meta?.sellingPoints
+    ?? product.meta?.selling_points
+    ?? [];
+}
+
+export function productAttributes(product: Product) {
+  return product.attributes
+    ?? product.specs
+    ?? product.meta?.attributes
+    ?? product.meta?.specs
+    ?? {};
+}
+
+export function productDescriptionMarkdown(product: Product) {
+  const parts = [
+    product.description,
+    product.descriptionMd,
+    product.description_md,
+    product.descriptionMarkdown,
+    product.description_markdown,
+    product.content ? stripFrontmatter(product.content) : "",
+  ]
+    .map((part) => (typeof part === "string" ? part.trim() : ""))
+    .filter(Boolean)
+    .filter(
+      (part, index, allParts) =>
+        allParts.findIndex((candidate) => candidate === part) === index,
+    );
+
+  return parts.join("\n\n");
 }
 
 export function normalizeImageUrl(value: string) {

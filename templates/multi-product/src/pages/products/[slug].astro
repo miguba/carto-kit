@@ -7,10 +7,12 @@ import {
   formatMoney,
   imageSrcSet,
   optimizedImageUrl,
+  productAttributes,
   productCardPrice,
+  productDescriptionMarkdown,
   productImages,
+  productSellingPoints,
   productTrustSignals,
-  stripFrontmatter,
 } from "@/lib/format";
 import type { Product } from "@/lib/types";
 
@@ -39,11 +41,9 @@ try {
 }
 
 const images = product ? productImages(product) : [];
-const sellingPoints = product?.sellingPoints ?? [];
-const attributes = Object.entries(product?.attributes ?? {});
-const description =
-  product?.description ||
-  (product?.content ? stripFrontmatter(product.content) : "");
+const sellingPoints = product ? productSellingPoints(product) : [];
+const attributes = product ? Object.entries(productAttributes(product)) : [];
+const description = product ? productDescriptionMarkdown(product) : "";
 const descriptionHtml = description
   ? renderProductMarkdown(description)
   : "";
@@ -288,6 +288,7 @@ function escapeAttribute(value: string) {
                 const image = productImages(item)[0];
                 const trust = productTrustSignals(item);
                 const price = productCardPrice(item);
+                const sellingPoint = productSellingPoints(item)[0];
 
                 return (
                 <a class="catalog-card" href={`/products/${item.slug}`}>
@@ -315,7 +316,7 @@ function escapeAttribute(value: string) {
                   </div>
                   <div class="catalog-card-body grid gap-2">
                     <h3>{item.title}</h3>
-                    {item.sellingPoints?.[0] ? <p>{item.sellingPoints[0]}</p> : null}
+                    {sellingPoint ? <p>{sellingPoint}</p> : null}
                   </div>
                   <div class="catalog-card-footer mt-auto pt-3 border-t border-line">
                     <div class="catalog-price-stack">

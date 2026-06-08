@@ -55,3 +55,32 @@ an override:
 ```bash
 npm create carto@latest -- my-storefront --api-base-url https://ems.example.com
 ```
+
+## Publishing
+
+To publish new versions of `carto-kit` and `create-carto` to npm, follow these steps:
+
+1. **Verify & Test**: Ensure everything compiles and passes local checks:
+   ```bash
+   npm run test
+   ```
+
+2. **Build**: Build the CLI package and copy the storefront templates:
+   ```bash
+   npm run build
+   ```
+
+3. **Update Versions**: 
+   - Update the `version` field in [packages/carto-kit/package.json](file:///Users/worker/wsxg/carto-kit/packages/carto-kit/package.json).
+   - Update the `version` field and the `carto-kit` dependency version in [packages/create-carto-wrapper/package.json](file:///Users/worker/wsxg/carto-kit/packages/create-carto-wrapper/package.json).
+
+4. **Publish to npm**:
+   First, publish the core CLI tool `carto-kit`:
+   ```bash
+   npm publish -w packages/carto-kit --access public
+   ```
+   Then, publish the `create-carto` wrapper:
+   ```bash
+   npm publish -w packages/create-carto-wrapper --access public
+   ```
+

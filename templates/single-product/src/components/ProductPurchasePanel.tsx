@@ -20,6 +20,7 @@ type Props = {
   defaultKey: string;
   initialKey?: string;
   items: PurchaseProductItem[];
+  mediaBaseUrl?: string;
 };
 
 const panelWidth = 'mx-auto max-w-6xl';
@@ -31,6 +32,7 @@ export default function ProductPurchasePanel({
   defaultKey,
   initialKey = '',
   items,
+  mediaBaseUrl,
 }: Props) {
   const initialActiveKey = getInitialActiveKey(items, defaultKey, initialKey);
   const [activeKey, setActiveKey] = useState(initialActiveKey);
@@ -56,21 +58,21 @@ export default function ProductPurchasePanel({
     () =>
       new Set(
         (decoration?.pics ?? [])
-          .map((image) => normalizeImageUrl(image))
+          .map((image) => normalizeImageUrl(image, mediaBaseUrl))
           .filter(Boolean),
       ),
-    [decoration],
+    [decoration, mediaBaseUrl],
   );
   const images = useMemo(
     () =>
       product
-        ? productImages(product, selectedVariant).filter(
+        ? productImages(product, selectedVariant, mediaBaseUrl).filter(
             (image) => !decorationImages.has(image),
           )
         : [],
-    [decorationImages, product, selectedVariant],
+    [decorationImages, mediaBaseUrl, product, selectedVariant],
   );
-  const video = product ? productVideo(product) : '';
+  const video = product ? productVideo(product, mediaBaseUrl) : '';
   const mediaItems = useMemo(
     () => [
       ...(video
@@ -431,7 +433,7 @@ export default function ProductPurchasePanel({
                     ? variant.compareAtPrice - variant.price
                     : 0;
                 const variantImage = variant.image
-                  ? normalizeImageUrl(variant.image)
+                  ? normalizeImageUrl(variant.image, mediaBaseUrl)
                   : '';
 
                 return (

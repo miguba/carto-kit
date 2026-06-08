@@ -3,17 +3,15 @@
   "name": "__APP_NAME__",
   "main": "@astrojs/cloudflare/entrypoints/server",
   "compatibility_date": "2026-05-17",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
+  "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "binding": "ASSETS",
-    "directory": "./dist"
+    "directory": "./dist",
   },
   "observability": {
-    "enabled": true
+    "enabled": true,
   },
   "vars": {
-    "APP_NAME": "__APP_NAME__"
-  }
+    "APP_NAME": "__APP_NAME__",
+  },
 }

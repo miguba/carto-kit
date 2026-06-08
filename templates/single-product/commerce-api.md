@@ -1,16 +1,15 @@
 # Commerce Frontend API
 
-Last updated: 2026-06-02
+Last updated: 2026-05-18
 
-This document describes the external commerce HTTP APIs used by commerce
-frontends and server-side integrations.
+This document describes the external commerce HTTP APIs used by a storefront frontend.
 
 ## Base URL
 
 Production example:
 
 ```text
-__EMS_API_BASE_URL__
+https://ims.dibsale.com
 ```
 
 Local development:
@@ -21,28 +20,17 @@ http://localhost:4321
 
 ## Common Rules
 
-All `/api/commerce/*` APIs require a Bearer token:
+All commerce APIs require a shop/site header. Use either header name:
 
 ```http
-Authorization: Bearer <server-app-token>
+X-Shop-Id: <shop-id>
 ```
 
-Create server apps in the EMS admin console under
-`Shop Settings -> Apps & Credentials`. The full key is shown only once
-when created. EMS stores only a SHA-256 hash of the token.
+or:
 
-The token is bound to one EMS site, so API requests do not send
-`X-Shop-Id` or `X-Site-Id`. EMS resolves the site from the token automatically.
-
-Use the token from a server-side environment only. Do not expose it in browser
-JavaScript.
-
-Scopes:
-
-| Scope            | Allows                                               |
-| ---------------- | ---------------------------------------------------- |
-| `commerce:read`  | `GET` APIs, such as products, decoration, config     |
-| `commerce:write` | non-`GET` APIs, such as order and payment operations |
+```http
+X-Site-Id: <shop-id>
+```
 
 Responses are JSON:
 
@@ -59,7 +47,7 @@ message string. Validation-heavy APIs may return a structured error object.
 ```json
 {
   "success": false,
-  "data": "Invalid server app token"
+  "data": "Missing X-Shop-Id header"
 }
 ```
 
@@ -139,6 +127,29 @@ type Product = {
 ```
 
 Public product APIs only return products whose `status` is `active`, and only return variants whose `status` is `active`.
+
+### Block
+
+Blocks are site-scoped reusable content entries. Frontends can store Block keys
+inside decoration config using their own conventions, then fetch the referenced
+content by keys.
+
+```ts
+type Block = {
+  key: string;
+  type: string;
+  meta: Record<string, unknown>;
+  content: string;
+  updatedAt: string;
+};
+
+type BlocksByKey = Record<string, Block>;
+
+type BlocksList = {
+  items: Block[];
+  total: number;
+};
+```
 
 ### Order
 
@@ -235,7 +246,7 @@ Public order detail and payment capture responses remove the internal `raw` paym
 
 ```http
 GET /api/commerce/products
-Authorization: Bearer <server-app-token>
+X-Shop-Id: <shop-id>
 ```
 
 Query parameters:
@@ -257,7 +268,7 @@ Example:
 
 ```http
 GET /api/commerce/products?limit=12&offset=0&q=shirt
-Authorization: Bearer sk_live_xxx
+X-Shop-Id: demo-shop
 ```
 
 ```json
@@ -310,17 +321,16 @@ Authorization: Bearer sk_live_xxx
 
 Common errors:
 
-| HTTP Status | Message                         |
-| ----------- | ------------------------------- |
-| `401`       | `Invalid server app token`      |
-| `403`       | `Insufficient server app scope` |
-| `500`       | Internal error message          |
+| HTTP Status | Message                    |
+| ----------- | -------------------------- |
+| `400`       | `Missing X-Shop-Id header` |
+| `500`       | Internal error message     |
 
 ### Get Product Detail
 
 ```http
 GET /api/commerce/products/{slug}
-Authorization: Bearer <server-app-token>
+X-Shop-Id: <shop-id>
 ```
 
 Path parameters:
@@ -339,20 +349,19 @@ Example:
 
 ```http
 GET /api/commerce/products/classic-shirt
-Authorization: Bearer sk_live_xxx
+X-Shop-Id: demo-shop
 ```
 
 Common errors:
 
-| HTTP Status | Message                         |
-| ----------- | ------------------------------- |
-| `401`       | `Invalid server app token`      |
-| `403`       | `Insufficient server app scope` |
-| `400`       | `Missing product slug`          |
-| `404`       | `Product not found`             |
-| `500`       | Internal error message          |
+| HTTP Status | Message                    |
+| ----------- | -------------------------- |
+| `400`       | `Missing X-Shop-Id header` |
+| `400`       | `Missing product slug`     |
+| `404`       | `Product not found`        |
+| `500`       | Internal error message     |
 
-### Content Plugin: Check Product Exists
+### Check Product Exists
 
 Checks whether a product already exists based on the slug EMS would generate
 from the product title. This endpoint checks products in any status (`draft`,
@@ -424,7 +433,7 @@ Common errors:
 | `400`       | `Invalid product title`    |
 | `500`       | Internal error message     |
 
-### Content Plugin: Import Product
+### Import Product
 
 Creates a product from an extension or other quick-entry tool. This endpoint is
 currently public and does not require the EMS auth header.
@@ -676,6 +685,164 @@ Common errors:
 | `400`       | `Invalid product import payload` with field-level `errors` |
 | `400`       | Other product validation error message                     |
 
+## Block APIs
+
+### Get Blocks By Keys
+
+Fetch reusable content Blocks by their user-managed keys. Missing keys are
+omitted from the response.
+
+Blocks have a lightweight `type` column for grouping and list queries. The
+default type is `block`. EMS does not enforce a fixed type enum; storefronts can
+define conventions such as `block`, `page`, `policy`, `post`, `faq`, or
+`announcement`.
+
+Block content may optionally include Markdown frontmatter. EMS parses
+frontmatter and returns it as `meta`, but does not validate or constrain the
+frontmatter schema. Storefront templates define the expected convention, and
+operators maintain the matching fields in EMS.
+
+```http
+GET /api/commerce/blocks?keys=home-intro,shipping-copy
+X-Shop-Id: <shop-id>
+```
+
+Public storefront route:
+
+```http
+GET /api/public/commerce/blocks?site=<shop-id>&keys=home-intro,shipping-copy
+```
+
+Query parameters:
+
+| Name   | Type   | Required | Description                                           |
+| ------ | ------ | -------- | ----------------------------------------------------- |
+| `keys` | string | Yes      | Comma-separated Block keys. Maximum 50 keys per call. |
+| `site` | string | Yes      | Public route only. Active site/shop id.               |
+
+Success response:
+
+```ts
+ApiResponse<BlocksByKey>;
+```
+
+Example:
+
+```http
+GET /api/commerce/blocks?keys=home-intro,shipping-copy,missing-key
+X-Shop-Id: demo-shop
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "home-intro": {
+      "key": "home-intro",
+      "type": "block",
+      "meta": {
+        "title": "Welcome",
+        "kind": "block"
+      },
+      "content": "## Welcome\nReusable markdown content.",
+      "updatedAt": "2026-06-07T00:00:00.000Z"
+    },
+    "shipping-copy": {
+      "key": "shipping-copy",
+      "type": "block",
+      "meta": {},
+      "content": "Free shipping on selected offers.",
+      "updatedAt": "2026-06-07T00:00:00.000Z"
+    }
+  }
+}
+```
+
+Decoration config remains free-form. EMS does not require a field named
+`blocks` or `blockKeys`; storefront templates can place Block keys wherever
+their own layout convention expects them, then call this API to resolve the
+content.
+
+### Get Blocks By Type
+
+Fetch a paginated list of Blocks by type. This is intended for frontend
+experiences that need a lightweight list, such as policies, static pages, FAQs,
+announcements, or future blog-like content, without introducing a separate Posts
+model.
+
+```http
+GET /api/commerce/blocks?type=policy&page=1&perPage=20
+X-Shop-Id: <shop-id>
+```
+
+Public storefront route:
+
+```http
+GET /api/public/commerce/blocks?site=<shop-id>&type=policy&page=1&perPage=20
+```
+
+Query parameters:
+
+| Name      | Type   | Required | Description                               |
+| --------- | ------ | -------- | ----------------------------------------- |
+| `type`    | string | Yes      | Block type to list, for example `policy`. |
+| `page`    | number | No       | 1-based page number. Defaults to `1`.     |
+| `perPage` | number | No       | Page size, 1 to 100. Defaults to `20`.    |
+| `site`    | string | Yes      | Public route only. Active site/shop id.   |
+
+Success response:
+
+```ts
+ApiResponse<BlocksList>;
+```
+
+Example:
+
+```json
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "key": "privacy-policy",
+        "type": "policy",
+        "meta": {
+          "title": "Privacy Policy",
+          "slug": "privacy-policy"
+        },
+        "content": "Privacy policy body...",
+        "updatedAt": "2026-06-07T00:00:00.000Z"
+      }
+    ],
+    "total": 1
+  }
+}
+```
+
+Example page-like Block:
+
+```md
+---
+title: Privacy Policy
+slug: privacy-policy
+kind: policy
+seoTitle: Privacy Policy
+seoDescription: How this store handles customer data.
+---
+
+Privacy policy body...
+```
+
+Common errors:
+
+| HTTP Status | Message                                              |
+| ----------- | ---------------------------------------------------- |
+| `400`       | `keys is required` for key lookup errors             |
+| `400`       | `type is required` for list lookup                   |
+| `400`       | Invalid `keys`, `type`, `page`, or `perPage` message |
+| `400`       | `Missing X-Shop-Id header`                           |
+| `500`       | Internal error message                               |
+
 ## Order APIs
 
 ### Create Order
@@ -685,7 +852,7 @@ Creates an order from active product variants. The backend calculates price tota
 ```http
 POST /api/commerce/orders
 Content-Type: application/json
-Authorization: Bearer <server-app-token>
+X-Shop-Id: <shop-id>
 ```
 
 Request body:
@@ -791,8 +958,7 @@ Common errors:
 
 | HTTP Status | Message                                      |
 | ----------- | -------------------------------------------- |
-| `401`       | `Invalid server app token`                   |
-| `403`       | `Insufficient server app scope`              |
+| `400`       | `Missing X-Shop-Id header`                   |
 | `400`       | Zod validation error message                 |
 | `400`       | `Product "{slug}" is not available`          |
 | `400`       | `SKU "{sku}" is not available for "{slug}"`  |
@@ -802,7 +968,7 @@ Common errors:
 
 ```http
 GET /api/commerce/orders/{orderNo}
-Authorization: Bearer <server-app-token>
+X-Shop-Id: <shop-id>
 ```
 
 Path parameters:
@@ -821,17 +987,16 @@ Example:
 
 ```http
 GET /api/commerce/orders/ORD2026051701HYABC123
-Authorization: Bearer sk_live_xxx
+X-Shop-Id: demo-shop
 ```
 
 Common errors:
 
-| HTTP Status | Message                         |
-| ----------- | ------------------------------- |
-| `401`       | `Invalid server app token`      |
-| `403`       | `Insufficient server app scope` |
-| `400`       | `Missing order number`          |
-| `404`       | `Order not found`               |
+| HTTP Status | Message                    |
+| ----------- | -------------------------- |
+| `400`       | `Missing X-Shop-Id header` |
+| `400`       | `Missing order number`     |
+| `404`       | `Order not found`          |
 
 ## Payment APIs
 
@@ -852,9 +1017,9 @@ Frontend payment-status rules:
 - Treat only the EMS API response as authoritative. A success page must not mark an order as paid from URL query parameters such as `?status=paid`, local state, or a PayPal approve callback alone.
 - Show the paid/confirmed state only when the captured order, or a fresh order detail response, has `paymentStatus: 'paid'`.
 - If `POST /api/commerce/payments/capture` fails or returns a non-paid order, show a payment failure or pending state and let the buyer retry or contact support.
-- Use `GET /api/commerce/config` for the PayPal SDK `clientId` and environment mode. Do not hardcode a PayPal sandbox/live client ID in the commerce frontend; the EMS site configuration decides which PayPal environment is active.
+- Use `GET /api/commerce/config` for the PayPal SDK `clientId` and environment mode. Do not hardcode a PayPal sandbox/live client ID in the storefront; the EMS site configuration decides which PayPal environment is active.
 - EMS only sets `paymentStatus: 'paid'` after a verified PayPal capture with a capture id, matching amount, and matching currency. After capture, EMS also queries PayPal order details with the same site PayPal credentials and verifies the returned payment again. Admin/manual order updates must not be used as a payment confirmation path.
-- Bank/card available-credit changes or pending authorizations are not payment confirmation. They may be temporary holds. The commerce frontend must rely on EMS/PayPal capture status, not the card issuer UI.
+- Bank/card available-credit changes or pending authorizations are not payment confirmation. They may be temporary holds. The storefront must rely on EMS/PayPal capture status, not the card issuer UI.
 
 PayPal Card Fields notes:
 
@@ -864,62 +1029,25 @@ PayPal Card Fields notes:
 - Call `cardFields.submit()` or the equivalent PayPal Card Fields confirmation method and wait for it to complete before calling `POST /api/commerce/payments/capture`.
 - If PayPal triggers a 3D Secure challenge during `cardFields.submit()`, keep the buyer in the checkout flow until the challenge succeeds, fails, or is cancelled. Do not call EMS capture when the buyer cancels or the card confirmation fails.
 - Do not call EMS capture immediately after rendering card fields or immediately after validating local form fields. The buyer/card confirmation step must complete first.
-- If PayPal Card Fields returns `UNPROCESSABLE_ENTITY` with `issue: "PAYER_CANNOT_PAY"` from `/v2/checkout/orders/{providerOrderId}/confirm-payment-source`, the payer/card cannot be used for this transaction. Do not call EMS capture for that provider order. Keep the EMS order unpaid/pending or failed in the commerce frontend UI, show a retry message, and ask the buyer to use another card/payment method or contact the card issuer/PayPal.
+- If PayPal Card Fields returns `UNPROCESSABLE_ENTITY` with `issue: "PAYER_CANNOT_PAY"` from `/v2/checkout/orders/{providerOrderId}/confirm-payment-source`, the payer/card cannot be used for this transaction. Do not call EMS capture for that provider order. Keep the EMS order unpaid/pending or failed in the storefront UI, show a retry message, and ask the buyer to use another card/payment method or contact the card issuer/PayPal.
 - If EMS capture returns an error such as `Verified PayPal capture did not complete: CREATED`, the PayPal order has not been verified as captured. Keep the buyer on the checkout failure/pending state and do not show an order-confirmed page.
 - A PayPal order status of `CREATED`, `SAVED`, `PAYER_ACTION_REQUIRED`, or any non-`COMPLETED` status is not paid. Only EMS returning `paymentStatus: 'paid'` after capture verification is paid.
 
-### Get Commerce Decoration
-
-Returns configurable commerce decoration blocks stored in
-`site.config.decorations`. This is the commerce-facing endpoint for shop
-frontends. The legacy `/api/site/decoration` endpoint is kept only for backward
-compatibility.
-
-```http
-GET /api/commerce/decoration
-Authorization: Bearer <server-app-token>
-```
-
-Use `key` to fetch one section:
-
-```http
-GET /api/commerce/decoration?key=home-hero
-Authorization: Bearer <server-app-token>
-```
-
-Success response:
-
-```ts
-type DecorationItem = Record<string, unknown>;
-
-type Response =
-  | ApiResponse<Record<string, DecorationItem[]>>
-  | ApiResponse<DecorationItem[]>;
-```
-
-Common errors:
-
-| HTTP Status | Message                         |
-| ----------- | ------------------------------- |
-| `401`       | `Invalid server app token`      |
-| `403`       | `Insufficient server app scope` |
-| `500`       | Internal error message          |
-
 ### Get Commerce Config
 
-Returns the public payment configuration required by the commerce frontend (excluding sensitive credentials like PayPal `clientSecret` and Stripe `secretKey`).
+Returns the public payment configuration required by the storefront (excluding sensitive credentials like PayPal `clientSecret` and Stripe `secretKey`).
 
 Each payment method is only enabled when its site config has `enabled: true` and the public credential for the selected mode is present.
 
 PayPal Card Fields should only be shown when `payments.paypal.creditCardEnabled` is `true`. Existing PayPal configs without this field are treated as credit-card-enabled for backward compatibility; set `payments.paypal.creditCardEnabled: false` to disable card-funded PayPal orders.
 
-The returned PayPal `mode` and `clientId` are scoped to the Bearer token site. The commerce frontend should initialize the PayPal SDK with this returned `clientId` so the browser SDK and EMS backend use the same sandbox/live environment.
+The returned PayPal `mode` and `clientId` are scoped to the requested `X-Shop-Id`. The storefront should initialize the PayPal SDK with this returned `clientId` so the browser SDK and EMS backend use the same sandbox/live environment.
 
-The returned Stripe `mode` and `publishableKey` are also scoped to the Bearer token site. The commerce frontend should initialize Stripe.js with this returned `publishableKey`.
+The returned Stripe `mode` and `publishableKey` are also scoped to the requested `X-Shop-Id`. The storefront should initialize Stripe.js with this returned `publishableKey`.
 
 ```http
 GET /api/commerce/config
-Authorization: Bearer <server-app-token>
+X-Shop-Id: <shop-id>
 ```
 
 Success response:
@@ -975,11 +1103,10 @@ Example response:
 
 Common errors:
 
-| HTTP Status | Message                         |
-| ----------- | ------------------------------- |
-| `401`       | `Invalid server app token`      |
-| `403`       | `Insufficient server app scope` |
-| `500`       | Internal error message          |
+| HTTP Status | Message                    |
+| ----------- | -------------------------- |
+| `400`       | `Missing X-Shop-Id header` |
+| `500`       | Internal error message     |
 
 ### Create Payment
 
@@ -988,7 +1115,7 @@ Creates or reuses a pending provider payment for an existing IMS order.
 ```http
 POST /api/commerce/payments/create
 Content-Type: application/json
-Authorization: Bearer <server-app-token>
+X-Shop-Id: <shop-id>
 ```
 
 Request body:
@@ -1027,7 +1154,7 @@ Notes:
 - Existing pending PayPal provider orders are reused only when the requested `fundingSource` matches. This prevents a wallet order from being reused for card fields, because card-funded orders need PayPal card/3D Secure configuration.
 - Card-funded pending PayPal provider orders are reused only when they were created with the current EMS card order schema version. Older card orders are skipped and a new provider order is created, because PayPal rejects unsupported card payment-source fields during Card Fields confirmation.
 - Card-funded PayPal Create Order requests use a schema-versioned `PayPal-Request-Id`, so PayPal does not return an older idempotent provider order created with a previous unsupported Card Fields payload.
-- When `fundingSource` is `"card"`, EMS creates the PayPal order with a Card Fields-compatible `payment_source.card.attributes.verification.method = "SCA_WHEN_REQUIRED"` payload. Shipping remains on `purchase_units[].shipping`; cardholder name and card billing address must be submitted from the commerce frontend through `cardFields.submit(...)`.
+- When `fundingSource` is `"card"`, EMS creates the PayPal order with a Card Fields-compatible `payment_source.card.attributes.verification.method = "SCA_WHEN_REQUIRED"` payload. Shipping remains on `purchase_units[].shipping`; cardholder name and card billing address must be submitted from the storefront through `cardFields.submit(...)`.
 - When `fundingSource` is omitted or `"paypal"`, EMS creates a PayPal wallet order and passes customer name/email plus the provided shipping address.
 - When `provider` is `"stripe"`, EMS creates a Stripe PaymentIntent with automatic payment methods, order metadata, customer email, and shipping address. The response includes `clientSecret`; use it with Stripe.js / Payment Element to confirm the payment.
 - Existing pending Stripe PaymentIntent records are reused for the order while they remain `created`.
@@ -1066,8 +1193,7 @@ Common errors:
 
 | HTTP Status | Message                                         |
 | ----------- | ----------------------------------------------- |
-| `401`       | `Invalid server app token`                      |
-| `403`       | `Insufficient server app scope`                 |
+| `400`       | `Missing X-Shop-Id header`                      |
 | `400`       | Zod validation error message                    |
 | `400`       | `Unsupported payment provider: {provider}`      |
 | `400`       | `Order not found`                               |
@@ -1083,12 +1209,12 @@ Common errors:
 
 Captures or verifies a provider payment after the buyer approves it in the provider frontend SDK.
 
-This endpoint is the step that converts an EMS order to paid. A PayPal frontend approval or Stripe frontend confirmation only means the provider flow completed in the browser; the commerce frontend or server-side integration must still call this endpoint and wait for a successful EMS response before showing a paid confirmation.
+This endpoint is the step that converts an EMS order to paid. A PayPal frontend approval or Stripe frontend confirmation only means the provider flow completed in the browser; the storefront must still call this endpoint and wait for a successful EMS response before showing a paid confirmation.
 
 ```http
 POST /api/commerce/payments/capture
 Content-Type: application/json
-Authorization: Bearer <server-app-token>
+X-Shop-Id: <shop-id>
 ```
 
 Request body:
@@ -1124,7 +1250,7 @@ Capture validation requirements:
 - Captured amount and currency must exactly match the EMS order total and currency.
 - The captured provider order id must match the pending payment record for the EMS order.
 - EMS must query PayPal order details after capture using the configured site PayPal credentials and repeat the id, invoice/order number, status, amount, and currency checks before storing `paymentStatus: 'paid'`.
-- EMS stores PayPal risk details in the payment `raw.riskDetails` object when returned by PayPal, including `processorResponse`, `authenticationResult`, `avsCode`, `cvvCode`, `responseCode`, `liabilityShift`, and `threeDSecure`. Commerce clients should still treat the EMS capture response as the source of truth for paid/unpaid status.
+- EMS stores PayPal risk details in the payment `raw.riskDetails` object when returned by PayPal, including `processorResponse`, `authenticationResult`, `avsCode`, `cvvCode`, `responseCode`, `liabilityShift`, and `threeDSecure`. Storefronts should still treat the EMS capture response as the source of truth for paid/unpaid status.
 - Stripe PaymentIntent verification must retrieve the PaymentIntent using the configured site Stripe secret key.
 - Stripe PaymentIntent status must be `succeeded`.
 - Stripe PaymentIntent amount, currency, id, and `metadata.orderNo` must match the EMS order and pending payment record.
@@ -1154,8 +1280,7 @@ Common errors:
 
 | HTTP Status | Message                                                 |
 | ----------- | ------------------------------------------------------- |
-| `401`       | `Invalid server app token`                              |
-| `403`       | `Insufficient server app scope`                         |
+| `400`       | `Missing X-Shop-Id header`                              |
 | `400`       | Zod validation error message                            |
 | `400`       | `Unsupported payment provider: {provider}`              |
 | `400`       | `Order not found`                                       |

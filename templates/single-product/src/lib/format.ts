@@ -19,7 +19,11 @@ export function formatVariantName(variant: ProductVariant) {
   return optionText || variant.sku;
 }
 
-export function productImages(product: Product, selectedVariant?: ProductVariant | null) {
+export function productImages(
+  product: Product,
+  selectedVariant?: ProductVariant | null,
+  cdnBaseUrl?: string,
+) {
   const urls = [
     selectedVariant?.image,
     product.mainImage,
@@ -27,18 +31,29 @@ export function productImages(product: Product, selectedVariant?: ProductVariant
     ...(product.meta?.decoration?.pics ?? []),
     ...(product.decoration?.pics ?? []),
   ]
-    .map((url) => (typeof url === 'string' ? normalizeImageUrl(url) : ''))
+    .map((url) =>
+      typeof url === 'string' ? normalizeImageUrl(url, cdnBaseUrl) : '',
+    )
     .filter(Boolean);
 
   return Array.from(new Set(urls));
 }
 
-export function productVideo(product: Product) {
-  return normalizeMediaUrl(product.video ?? product.videoUrl ?? product.video_url ?? product.meta?.video ?? product.meta?.videoUrl ?? product.meta?.video_url ?? '');
+export function productVideo(product: Product, cdnBaseUrl?: string) {
+  return normalizeMediaUrl(
+    product.video ??
+      product.videoUrl ??
+      product.video_url ??
+      product.meta?.video ??
+      product.meta?.videoUrl ??
+      product.meta?.video_url ??
+      '',
+    cdnBaseUrl,
+  );
 }
 
-export function normalizeImageUrl(value: string) {
-  return normalizeMediaUrl(value);
+export function normalizeImageUrl(value: string, cdnBaseUrl?: string) {
+  return normalizeMediaUrl(value, cdnBaseUrl);
 }
 
 export function extractProductContentImages(value: string) {
@@ -61,7 +76,7 @@ export function removeProductContentImages(value: string) {
     .trim();
 }
 
-function normalizeMediaUrl(value: string) {
+function normalizeMediaUrl(value: string, cdnBaseUrl?: string) {
   const image = value.trim();
   if (!image) {
     return '';
@@ -71,12 +86,12 @@ function normalizeMediaUrl(value: string) {
     return image;
   }
 
-  const { cdnBaseUrl } = getCommerceConfig();
-  if (!cdnBaseUrl) {
+  const mediaBaseUrl = cdnBaseUrl ?? getCommerceConfig().cdnBaseUrl;
+  if (!mediaBaseUrl) {
     return image;
   }
 
-  return `${cdnBaseUrl}/${image.replace(/^\/+/, '')}`;
+  return `${mediaBaseUrl}/${image.replace(/^\/+/, '')}`;
 }
 
 function escapeHtml(value: string) {
