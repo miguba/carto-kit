@@ -50,6 +50,7 @@ import {
   productImages,
 } from "@/lib/format";
 import { setCommerceMediaConfig, type CommerceMediaConfig } from "@/lib/config";
+import type { BrandLogo } from "@/lib/brand";
 import { MuiSelectField, MuiTextField } from "@/components/MuiField";
 import type {
   ApiResponse,
@@ -69,7 +70,7 @@ type Props = {
   paymentConfigError: string;
   mapboxAccessToken: string;
   mediaConfig?: CommerceMediaConfig;
-  siteName: string;
+  brandLogo: BrandLogo;
 };
 
 type CheckoutState =
@@ -390,7 +391,7 @@ export default function CheckoutForm({
   paymentConfigError,
   mapboxAccessToken,
   mediaConfig,
-  siteName,
+  brandLogo,
 }: Props) {
   setCommerceMediaConfig(mediaConfig);
 
@@ -1368,18 +1369,10 @@ export default function CheckoutForm({
       <div className="checkout-brandbar" aria-label="Checkout confidence">
         <a className="checkout-brand mb-2" href="/">
           <img
-            className="brand-mark"
-            src="/logo-mark.svg"
-            alt=""
-            aria-hidden="true"
+            className="brand-logo"
+            src={brandLogo.src}
+            alt={brandLogo.alt}
           />
-          <span className="checkout-brand-copy">
-            <strong>{siteName}</strong>
-            <small>
-              <ShieldCheck size={13} aria-hidden="true" />
-              Secure checkout
-            </small>
-          </span>
         </a>
         <div
           className="checkout-timer"

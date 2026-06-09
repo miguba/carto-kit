@@ -1,13 +1,17 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { getSiteConfigFromServer } from '@/lib/commerce';
+import { siteAbsoluteUrl } from '@/lib/seo';
 
 const site = await getSiteConfigFromServer();
+const canonicalUrl = siteAbsoluteUrl('/wonder-box', site.domain, Astro.url.origin);
 ---
 
 <BaseLayout
   title={`${site.name} | 开箱即用的美学在线商店系统`}
   description="面向个人创作者与轻量级商家的极致独立站系统，开启你的盒子，向世界传递惊喜。"
+  canonicalUrl={canonicalUrl}
+  lang="zh-Hans"
 >
   <div class="wb-theme-wrapper">
     <!-- Google Fonts Outfit & Inter -->
@@ -191,8 +195,7 @@ const site = await getSiteConfigFromServer();
         <h2 class="wb-cta-title">获取完整的品牌行销策划方案</h2>
         <p class="wb-cta-desc">我们已为您梳理出一份包含品牌冷启动、社交媒体 KOL 推广、增长裂变机制以及视觉规范的完整方案文档。</p>
         <div class="wb-cta-buttons">
-          <a href="/Users/worker/.gemini/antigravity/brain/2f8b4efc-7247-41f4-aa72-49cd68e2bc8a/wonder_box_brand_marketing_plan.md" class="wb-btn-primary pink-btn">查看完整策划案</a>
-          <a href="#simulator" class="wb-btn-text">调整增长参数</a>
+          <a href="#simulator" class="wb-btn-primary pink-btn">调整增长参数</a>
         </div>
       </div>
     </section>

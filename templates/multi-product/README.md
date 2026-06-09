@@ -1,4 +1,4 @@
-# __PROJECT_NAME__
+# **PROJECT_NAME**
 
 Multi-product Carto storefront template for EMS with catalog browsing, product
 detail pages, and React checkout.
@@ -13,12 +13,122 @@ npm run dev
 
 Required `.env` values:
 
+- `PUBLIC_COMMERCE_API_BASE_URL`: EMS API base URL when developing this template
+  directly. Generated projects receive this from the scaffolded Carto config.
 - `COMMERCE_API_TOKEN`: EMS server app token. Keep it server-side only.
 - `DEPLOYMENT_TARGET`: `cloudflare-workers` or `vps`.
 
 Optional values:
 
 - `PUBLIC_MAPBOX_ACCESS_TOKEN`: enables checkout address autofill.
+
+## Brand Logo
+
+The template includes a default full Joys Box logo image at `/logo.svg`. Store
+owners can keep that default or provide a custom full logo from EMS site config.
+
+Recommended EMS site config fields:
+
+```yaml
+name: Joys Box
+logoUrl: logos/joys-box-logo.svg
+logoAlt: Joys Box logo
+```
+
+`logoUrl` may be an absolute URL, a site path such as `/logo.png`, or a relative
+media path served from the configured EMS CDN. If `logoUrl` is empty, the
+storefront falls back to `/logo.svg`.
+
+The storefront renders `logoUrl` as the entire visible brand block in the header,
+footer, and checkout brand bar. `site.name` is still used for page metadata and
+fallback alt text, but it is not appended as separate visible text next to the
+logo image.
+
+## Home SEO
+
+Homepage SEO is managed with a fixed EMS settings Block. Logo and brand name stay
+in site config, but homepage SEO copy is template-level content that store
+owners can safely edit from Blocks.
+
+Create or edit this Block in EMS:
+
+| Field     | Value      |
+| --------- | ---------- |
+| `key`     | `home-seo` |
+| `type`    | `settings` |
+| `content` | Markdown   |
+
+Recommended Block content:
+
+```md
+---
+blockKey: home-seo
+type: settings
+homeSeoTitle: Joys Box | Genuine Products, Instant Joy
+homeSeoDescription: Handpicked products at unbeatable prices. Genuine quality, fast delivery, and a checkout experience that sparks joy.
+---
+
+# Home SEO Settings
+```
+
+`homeSeoTitle` controls the homepage `<title>`. `homeSeoDescription` controls
+the homepage meta description. If the Block is missing, the template falls back
+to `src/content/settings/home-seo.md`.
+
+## Policy Content In EMS
+
+This template ships with Joys Box starter policy content so the storefront has
+complete legal and help pages before EMS Blocks are configured. Default Markdown
+files live here:
+
+```text
+src/content/policies/
+```
+
+Store owners can override each default from EMS by creating Blocks:
+
+| Storefront route              | Block key                    | Type     |
+| ----------------------------- | ---------------------------- | -------- |
+| `/contact-us`                 | `contact-us`                 | `policy` |
+| `/shipping-policy`            | `shipping-policy`            | `policy` |
+| `/cancellation-refund-policy` | `cancellation-refund-policy` | `policy` |
+| `/terms-conditions`           | `terms-conditions`           | `policy` |
+| `/privacy-policy`             | `privacy-policy`             | `policy` |
+
+Keep the page-level settings in the Markdown frontmatter at the top of the
+Block content:
+
+```md
+---
+blockKey: shipping-policy
+type: policy
+eyebrow: Shipping
+title: Shipping Policy
+intro: Everything you need to know about the Joys Box shipping process...
+updated: June 9, 2026
+seoTitle: Shipping Policy
+seoDescription: Learn about Joys Box shipping times, delivery coverage, tracking, and free shipping details.
+asideTitle: Questions about your order?
+asideText: If your order is delayed or you need shipping assistance, reach out with your order number and we will help.
+---
+
+## Processing Time
+
+Policy body in Markdown...
+```
+
+The policy page reads these fields as follows:
+
+- `title`: main page heading.
+- `intro`: hero introduction below the heading.
+- `updated`: visible last-updated label.
+- `seoTitle` and `seoDescription`: page metadata.
+- `asideTitle` and `asideText`: customer-care card copy.
+- `##` headings: body section headings and the "On this page" index.
+
+The support email shown in the customer-care cards comes from EMS site config
+(`supportEmail`), not from policy Blocks. Fixed cross-links such as
+`/contact-us` and `/cancellation-refund-policy` stay in the template.
 
 ## Deploy To Cloudflare
 
@@ -55,4 +165,6 @@ If you want to use SSH password login instead of a private key, leave
 prompt for passwords in your terminal.
 
 Before publishing, review legal pages and replace generic business details with
-your actual company, address, refund, shipping, and policy terms.
+your actual company, address, refund, shipping, and policy terms. For policy
+pages backed by Blocks, make the final edits in EMS so the storefront can update
+without a code deploy.

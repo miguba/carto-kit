@@ -15,8 +15,10 @@ type Props = {
   eyebrow: string;
   title: string;
   intro: string;
-  updated: string;
-  sections: Section[];
+  updated?: string;
+  sections?: Section[];
+  contentHtml?: string;
+  contentHeadings?: string[];
   asideTitle?: string;
   asideText?: string;
   contactMethods?: ContactMethod[];
@@ -27,7 +29,9 @@ const {
   title,
   intro,
   updated,
-  sections,
+  sections = [],
+  contentHtml = "",
+  contentHeadings = [],
   asideTitle = 'Need a hand?',
   asideText = 'Our support team can help with order questions, policy details, and checkout assistance.',
   contactMethods = [],
@@ -48,7 +52,7 @@ function slugify(value: string) {
       <p class="eyebrow">{eyebrow}</p>
       <h1>{title}</h1>
       <p>{intro}</p>
-      <span>Last updated: {updated}</span>
+      {updated ? <span>Last updated: {updated}</span> : null}
     </div>
     <aside class="panel policy-aside" aria-label="Policy support information">
       <p class="eyebrow">Customer Care</p>
@@ -81,11 +85,15 @@ function slugify(value: string) {
   <div class="container policy-body-grid">
     <nav class="policy-index" aria-label="Page contents">
       <strong>On this page</strong>
-      {sections.map((section) => <a href={`#${slugify(section.title)}`}>{section.title}</a>)}
+      {contentHeadings.length
+        ? contentHeadings.map((heading) => <a href={`#${slugify(heading)}`}>{heading}</a>)
+        : sections.map((section) => <a href={`#${slugify(section.title)}`}>{section.title}</a>)}
     </nav>
-    <article class="policy-content">
+    <article class="policy-content" class:list={[contentHtml ? "policy-markdown-content" : ""]}>
       {
-        sections.map((section) => (
+        contentHtml ? (
+          <div set:html={contentHtml} />
+        ) : sections.map((section) => (
           <section id={slugify(section.title)}>
             <h2>{section.title}</h2>
             {section.body ? <p>{section.body}</p> : null}

@@ -1,13 +1,14 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { getOrder } from '@/lib/commerce';
-import { getSiteConfigFromServer } from '@/lib/commerce';
+import { getCommerceConfigFromServer, getOrder } from '@/lib/commerce';
 import { IMAGE_PRESETS, formatMoney, imagePlaceholderStyle, normalizeImageUrl, optimizedImageUrl } from '@/lib/format';
 
 export const prerender = false;
 
 const { orderNo } = Astro.params;
-const site = await getSiteConfigFromServer();
+const commerceConfig = await getCommerceConfigFromServer();
+const site = commerceConfig.site;
+const successNotice = commerceConfig.checkout.successNotice;
 let order = null;
 let loadError = '';
 
@@ -32,7 +33,7 @@ const orderItems = order
   : [];
 ---
 
-<BaseLayout title={order ? `Order ${order.orderNo}` : 'Order status'} description="Order status and payment result.">
+<BaseLayout title={order ? `Order ${order.orderNo}` : 'Order status'} description="Order status and payment result." noindex>
   {
     order ? (
       <section class="section order-page">
@@ -49,6 +50,7 @@ const orderItems = order
               <p>
                 We are preparing your {site.name} order now. Keep <strong>{order.orderNo}</strong> handy for support and fulfillment updates.
               </p>
+              {paid && successNotice ? <p>{successNotice}</p> : null}
               <div class="status-actions flex flex-wrap gap-3 mt-7">
                 <a class="primary-button status-primary" href="/">Continue shopping</a>
                 <a class="secondary-button status-secondary" href="/#support">Contact support</a>

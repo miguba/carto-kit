@@ -5,7 +5,9 @@ import { getCommerceConfigFromServer, getProduct, getProducts } from "@/lib/comm
 import {
   IMAGE_PRESETS,
   formatMoney,
+  imagePlaceholderStyle,
   imageSrcSet,
+  normalizeImageUrl,
   optimizedImageUrl,
   productAttributes,
   productCardPrice,
@@ -14,6 +16,7 @@ import {
   productSellingPoints,
   productTrustSignals,
 } from "@/lib/format";
+import { markdownToPlainText, renderMarkdown } from "@/lib/markdown";
 import type { Product } from "@/lib/types";
 
 export const prerender = false;
@@ -45,8 +48,33 @@ const sellingPoints = product ? productSellingPoints(product) : [];
 const attributes = product ? Object.entries(productAttributes(product)) : [];
 const description = product ? productDescriptionMarkdown(product) : "";
 const descriptionHtml = description
-  ? renderProductMarkdown(description)
+  ? renderMarkdown(description, { headingOffset: 1 })
   : "";
+const descriptionText = description ? markdownToPlainText(description) : "";
+const productSeo = product?.meta?.seo ?? {};
+const pageTitle = product
+  ? `${cleanText(productSeo.title) || product.title} | ${site.name}`
+  : `Product Detail | ${site.name}`;
+const pageDescription = product
+  ? cleanText(productSeo.description) ||
+    cleanText(descriptionText) ||
+    cleanText(sellingPoints[0]) ||
+    product.title
+  : `${site.name} product detail page.`;
+const seoImage = product
+  ? toAbsoluteUrl(
+      normalizedImage(productSeo.image) || images[0] || "",
+      site.domain,
+      Astro.url.origin,
+    )
+  : "";
+const productPath = product
+  ? normalizedCanonicalPath(productSeo.canonicalPath) || `/products/${product.slug}`
+  : Astro.url.pathname;
+const canonicalUrl = toAbsoluteUrl(productPath, site.domain, Astro.url.origin);
+const keywords = product
+  ? uniqueStrings([...(productSeo.keywords ?? []), ...product.tags])
+  : [];
 const optionNames = product
   ? Array.from(
       new Set(
@@ -65,12 +93,22 @@ const schema =
     ? {
         "@context": "https://schema.org",
         "@type": "Product",
-        name: product.title,
-        image: images,
-        description: description || sellingPoints[0] || product.title,
+        name: cleanText(productSeo.title) || product.title,
+        image: uniqueStrings([
+          seoImage,
+          ...images.map((image) =>
+            toAbsoluteUrl(image, site.domain, Astro.url.origin),
+          ),
+        ]),
+        description: pageDescription,
         sku: lowestVariant.sku,
+        brand: {
+          "@type": "Brand",
+          name: site.name,
+        },
         offers: {
           "@type": "Offer",
+          url: canonicalUrl,
           priceCurrency: product.currency,
           price:
             product.currency === "JPY"
@@ -83,138 +121,115 @@ const schema =
         },
       }
     : null;
-
-function renderProductMarkdown(markdown: string) {
-  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
-  const blocks: string[] = [];
-  let index = 0;
-
-  while (index < lines.length) {
-    const line = lines[index];
-
-    if (!line.trim()) {
-      index += 1;
-      continue;
-    }
-
-    const heading = /^(#{1,6})\s+(.+)$/.exec(line);
-    if (heading) {
-      const level = Math.min(heading[1].length + 1, 6);
-      blocks.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
-      index += 1;
-      continue;
-    }
-
-    const unorderedItems: string[] = [];
-    while (index < lines.length) {
-      const item = /^\s*[-*+]\s+(.+)$/.exec(lines[index]);
-      if (!item) break;
-      unorderedItems.push(`<li>${renderInlineMarkdown(item[1])}</li>`);
-      index += 1;
-    }
-    if (unorderedItems.length) {
-      blocks.push(`<ul>${unorderedItems.join("")}</ul>`);
-      continue;
-    }
-
-    const orderedItems: string[] = [];
-    while (index < lines.length) {
-      const item = /^\s*\d+[.)]\s+(.+)$/.exec(lines[index]);
-      if (!item) break;
-      orderedItems.push(`<li>${renderInlineMarkdown(item[1])}</li>`);
-      index += 1;
-    }
-    if (orderedItems.length) {
-      blocks.push(`<ol>${orderedItems.join("")}</ol>`);
-      continue;
-    }
-
-    const paragraph: string[] = [];
-    while (index < lines.length && lines[index].trim()) {
-      paragraph.push(lines[index].trim());
-      index += 1;
-    }
-    blocks.push(`<p>${renderInlineMarkdown(paragraph.join(" "))}</p>`);
-  }
-
-  return blocks.join("\n");
-}
-
-function renderInlineMarkdown(text: string) {
-  const pattern =
-    /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*/g;
-  let cursor = 0;
-  let html = "";
-
-  for (const match of text.matchAll(pattern)) {
-    html += escapeHtml(text.slice(cursor, match.index));
-
-    if (match[1] !== undefined) {
-      const alt = match[1];
-      const src = match[2];
-      if (isSafeImageUrl(src)) {
-        const imageUrl = optimizedImageUrl(src, IMAGE_PRESETS.markdown);
-        html += `<img src="${escapeAttribute(imageUrl)}" alt="${escapeAttribute(alt)}" loading="lazy" decoding="async" fetchpriority="low">`;
-      } else {
-        html += escapeHtml(alt);
+const breadcrumbSchema =
+  product
+    ? {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: "Home",
+            item: toAbsoluteUrl("/", site.domain, Astro.url.origin),
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: "Products",
+            item: toAbsoluteUrl("/#products", site.domain, Astro.url.origin),
+          },
+          {
+            "@type": "ListItem",
+            position: 3,
+            name: product.title,
+            item: canonicalUrl,
+          },
+        ],
       }
-    } else if (match[3] !== undefined) {
-      const label = match[3];
-      const href = match[4];
-      html += isSafeLinkUrl(href)
-        ? `<a href="${escapeAttribute(href)}">${escapeHtml(label)}</a>`
-        : escapeHtml(label);
-    } else if (match[5] !== undefined) {
-      html += `<code>${escapeHtml(match[5])}</code>`;
-    } else if (match[6] !== undefined) {
-      html += `<strong>${escapeHtml(match[6])}</strong>`;
-    } else if (match[7] !== undefined) {
-      html += `<em>${escapeHtml(match[7])}</em>`;
-    }
+    : null;
 
-    cursor = match.index + match[0].length;
+function cleanText(value: unknown) {
+  return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+}
+
+function uniqueStrings(values: Array<string | null | undefined>) {
+  return Array.from(new Set(values.map(cleanText).filter(Boolean)));
+}
+
+function normalizedImage(value: unknown) {
+  const text = cleanText(value);
+  if (!text) {
+    return "";
   }
 
-  return html + escapeHtml(text.slice(cursor));
+  if (/^(https?:|\/)/.test(text)) {
+    return text;
+  }
+
+  return normalizeImageUrl(text);
 }
 
-function isSafeImageUrl(url: string) {
-  return /^(https?:\/\/|\/(?!\/)|\.{0,2}\/)/i.test(url);
+function normalizedCanonicalPath(value: unknown) {
+  const text = cleanText(value);
+  if (!text) {
+    return "";
+  }
+
+  if (/^https?:\/\//.test(text)) {
+    return text;
+  }
+
+  return text.startsWith("/") ? text : `/${text}`;
 }
 
-function isSafeLinkUrl(url: string) {
-  return /^(https?:\/\/|mailto:|tel:|\/(?!\/)|#)/i.test(url);
+function toAbsoluteUrl(value: string, domain: string, fallbackOrigin: string) {
+  if (!value) {
+    return "";
+  }
+
+  if (/^https?:\/\//.test(value)) {
+    return value;
+  }
+
+  const origin = domain
+    ? /^https?:\/\//.test(domain)
+      ? domain.replace(/\/+$/, "")
+      : `https://${domain.replace(/\/+$/, "")}`
+    : fallbackOrigin.replace(/\/+$/, "");
+
+  return `${origin}${value.startsWith("/") ? value : `/${value}`}`;
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function escapeAttribute(value: string) {
-  return escapeHtml(value).replace(/`/g, "&#96;");
-}
 ---
 
 <BaseLayout
-  title={product ? `${product.title} | ${site.name}` : `Product Detail | ${site.name}`}
-  description={product
-    ? description || product.title
-    : `${site.name} product detail page.`}
+  title={pageTitle}
+  description={pageDescription}
+  canonicalUrl={canonicalUrl}
+  image={seoImage}
+  keywords={keywords}
+  noindex={Boolean(productSeo.noindex)}
+  type="product"
 >
   {
     product ? (
       <>
         {schema ? (
-          <script
-            is:inline
-            type="application/ld+json"
-            set:html={JSON.stringify(schema)}
-          />
+          <>
+            <script
+              is:inline
+              type="application/ld+json"
+              set:html={JSON.stringify(schema)}
+            />
+            {breadcrumbSchema ? (
+              <script
+                is:inline
+                type="application/ld+json"
+                set:html={JSON.stringify(breadcrumbSchema)}
+              />
+            ) : null}
+          </>
         ) : null}
 
         <ProductPurchasePanel product={product} mediaConfig={commerceConfig.media} client:load />
@@ -292,7 +307,10 @@ function escapeAttribute(value: string) {
 
                 return (
                 <a class="catalog-card" href={`/products/${item.slug}`}>
-                  <div class="media-frame catalog-card-art image-placeholder-frame">
+                  <div
+                    class="media-frame catalog-card-art image-placeholder-frame"
+                    style={image ? imagePlaceholderStyle(image) : undefined}
+                  >
                     {image ? (
                       <img
                         src={optimizedImageUrl(image, IMAGE_PRESETS.card)}
@@ -337,13 +355,13 @@ function escapeAttribute(value: string) {
         ) : null}
 
         <section class="product-page-footer-nav">
-          <div class="container product-breadcrumbs" aria-label="Breadcrumb">
-            <a href="/">Home</a>
-            <span>/</span>
-            <a href="/#products">Collections</a>
-            <span>/</span>
-            <strong>{product.title}</strong>
-          </div>
+          <nav class="container product-breadcrumbs" aria-label="Breadcrumb">
+            <ol>
+              <li><a href="/">Home</a></li>
+              <li><a href="/#products">Collections</a></li>
+              <li aria-current="page">{product.title}</li>
+            </ol>
+          </nav>
         </section>
       </>
     ) : (

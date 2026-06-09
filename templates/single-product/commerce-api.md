@@ -1037,7 +1037,7 @@ PayPal Card Fields notes:
 
 Returns the public payment configuration required by the storefront (excluding sensitive credentials like PayPal `clientSecret` and Stripe `secretKey`).
 
-Each payment method is only enabled when its site config has `enabled: true` and the public credential for the selected mode is present.
+Each payment method is only enabled when its site config has `enabled: true`, the public credential for the selected mode is present, and EMS can resolve the matching backend secret from the Payment Secret Vault. Payment secrets are managed through Shop Settings -> Payment Secrets; they must not be stored in Site Config frontmatter, exported templates, browser payloads, or logs.
 
 PayPal Card Fields should only be shown when `payments.paypal.creditCardEnabled` is `true`. Existing PayPal configs without this field are treated as credit-card-enabled for backward compatibility; set `payments.paypal.creditCardEnabled: false` to disable card-funded PayPal orders.
 

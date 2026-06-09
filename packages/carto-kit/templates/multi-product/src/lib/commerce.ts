@@ -3,6 +3,7 @@ import { COMMERCE_API_TOKEN } from "astro:env/server";
 import { getCommerceConfig, setCommerceMediaConfig, type CommerceMediaConfig } from "./config";
 import type {
   ApiResponse,
+  BlocksByKey,
   CreateOrderRequest,
   CreatePaymentResponse,
   Order,
@@ -74,6 +75,16 @@ export function getProducts(limit = 12) {
 
   return commerceRequest<Product[]>(
     `/api/commerce/products?${params.toString()}`,
+  );
+}
+
+export function getBlocksByKeys(keys: string[]) {
+  const params = new URLSearchParams({
+    keys: keys.join(","),
+  });
+
+  return commerceRequest<BlocksByKey>(
+    `/api/commerce/blocks?${params.toString()}`,
   );
 }
 
@@ -169,12 +180,12 @@ export type SiteConfig = {
   legalName: string;
   domain: string;
   supportEmail: string;
-  privacyEmail: string;
-  supportResponseTime: string;
-  policyUpdatedAt: string;
-  copyrightYear: string;
   cdnBaseUrl?: string | null;
-  registeredAddress?: string;
+  logo?: string | null;
+  logoUrl?: string | null;
+  logoImage?: string | null;
+  brandLogo?: string | null;
+  logoAlt?: string | null;
 };
 
 export async function getSiteConfigFromServer() {

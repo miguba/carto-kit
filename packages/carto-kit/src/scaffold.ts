@@ -164,8 +164,6 @@ async function replaceTemplateVars(projectDir: string, answers: StorefrontAnswer
   const siteName = toTitleName(answers.projectName);
   const appName = toAppName(answers.projectName);
   const supportEmail = `support@${answers.siteDomain}`;
-  const privacyEmail = `privacy@${answers.siteDomain}`;
-  const currentYear = String(new Date().getFullYear());
   const replacements = new Map([
     ["__PROJECT_NAME__", answers.projectName],
     ["__EMS_API_BASE_URL__", answers.commerceApiBaseUrl],
@@ -175,14 +173,7 @@ async function replaceTemplateVars(projectDir: string, answers: StorefrontAnswer
     ["__APP_NAME__", appName],
     ["__SITE_NAME__", siteName],
     ["__SITE_LEGAL_NAME__", siteName],
-    ["__SUPPORT_EMAIL__", supportEmail],
-    ["__PRIVACY_EMAIL__", privacyEmail],
-    ["__POLICY_UPDATED_AT__", new Intl.DateTimeFormat("en", {
-      month: "long",
-      day: "numeric",
-      year: "numeric"
-    }).format(new Date())],
-    ["__COPYRIGHT_YEAR__", currentYear]
+    ["__SUPPORT_EMAIL__", supportEmail]
   ]);
 
   const files = [

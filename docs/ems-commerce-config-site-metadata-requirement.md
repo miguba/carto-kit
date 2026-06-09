@@ -13,10 +13,6 @@ PUBLIC_SITE_NAME
 PUBLIC_SITE_LEGAL_NAME
 PUBLIC_SITE_DOMAIN
 PUBLIC_SUPPORT_EMAIL
-PUBLIC_PRIVACY_EMAIL
-PUBLIC_SUPPORT_RESPONSE_TIME
-PUBLIC_POLICY_UPDATED_AT
-PUBLIC_COPYRIGHT_YEAR
 ```
 
 Carto should instead read them from:
@@ -40,11 +36,6 @@ type CommerceConfigResponse = {
     legalName: string;
     domain: string;
     supportEmail: string;
-    privacyEmail: string;
-    supportResponseTime: string;
-    policyUpdatedAt: string;
-    copyrightYear: string;
-    registeredAddress?: string;
   };
 
   checkout: {
@@ -76,11 +67,6 @@ type CommerceConfigResponse = {
 | `site.legalName` | Legal business name | `Wonder Box Limited` |
 | `site.domain` | Storefront domain | `example.com` |
 | `site.supportEmail` | Customer support email | `support@example.com` |
-| `site.privacyEmail` | Privacy request email | `privacy@example.com` |
-| `site.supportResponseTime` | Customer support response time copy | `1-2 business days` |
-| `site.policyUpdatedAt` | Policy updated date copy | `June 5, 2026` |
-| `site.copyrightYear` | Copyright year | `2026` |
-| `site.registeredAddress` | Registered business address, optional | `FLAT/RM 1405A, 14/F...` |
 
 ## Example Response
 
@@ -92,12 +78,7 @@ type CommerceConfigResponse = {
       "name": "Wonder Box",
       "legalName": "Wonder Box Limited",
       "domain": "example.com",
-      "supportEmail": "support@example.com",
-      "privacyEmail": "privacy@example.com",
-      "supportResponseTime": "1-2 business days",
-      "policyUpdatedAt": "June 5, 2026",
-      "copyrightYear": "2026",
-      "registeredAddress": "FLAT/RM 1405A, 14/F, THE BELGIAN BANK BUILDING, NOS.721-725 NATHAN ROAD, MONGKOK, KL, HONG KONG"
+      "supportEmail": "support@example.com"
     },
     "checkout": {
       "successNotice": "Payment successful. Please check your email for the order confirmation and save your Order ID for future reference."

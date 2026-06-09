@@ -3,6 +3,7 @@ import CheckoutForm from '@/components/CheckoutForm';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import { getProduct, getCommerceConfigFromServer } from '@/lib/commerce';
 import type { SiteConfig } from '@/lib/commerce';
+import { getBrandLogo } from '@/lib/brand';
 import { getCommerceConfig, type CommerceMediaConfig } from '@/lib/config';
 
 export const prerender = false;
@@ -31,11 +32,11 @@ try {
 
   if (paypalConfig.enabled && paypalConfig.clientId) {
     paypalClientId = paypalConfig.clientId;
-    paypalCardEnabled = Boolean(
+    paypalCardEnabled =
       paypalConfig.creditCardEnabled ??
         paypalConfig.cardEnabled ??
-        paypalConfig.card?.enabled,
-    );
+        paypalConfig.card?.enabled ??
+        true;
   }
 
   if (stripeConfig?.enabled && stripeConfig.publishableKey) {
@@ -54,6 +55,8 @@ if (!site) {
   throw new Error(paymentConfigError || 'Unable to load site metadata from /api/commerce/config.');
 }
 
+const brandLogo = getBrandLogo(site);
+
 if (!slug || !sku || !Number.isInteger(quantity)) {
   loadError = 'Missing or invalid checkout selection.';
 } else {
@@ -71,6 +74,7 @@ if (!slug || !sku || !Number.isInteger(quantity)) {
 
 <BaseLayout
   checkoutOnly
+  noindex
   title={`Secure Checkout | ${site.name}`}
   description={`Begin your heart-warming journey with ${site.name}. Enjoy secure checkout with supported card and wallet payment options.`}
 >
@@ -88,7 +92,7 @@ if (!slug || !sku || !Number.isInteger(quantity)) {
             paymentConfigError={paymentConfigError}
             mapboxAccessToken={mapboxAccessToken}
             mediaConfig={mediaConfig}
-            siteName={site.name}
+            brandLogo={brandLogo}
             client:only="react"
           />
         </div>

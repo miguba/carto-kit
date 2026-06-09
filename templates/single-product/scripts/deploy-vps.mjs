@@ -48,6 +48,8 @@ try {
   const tmp = await mkdtemp(join(tmpdir(), "carto-"));
   const archive = join(tmp, "storefront.tgz");
   const runtimeEnv = join(tmp, "runtime.env");
+  const remoteArchive = `/tmp/carto-storefront-${process.pid}.tgz`;
+  const remoteRuntimeEnv = `/tmp/carto-runtime-${process.pid}.env`;
   await writeFile(runtimeEnv, buildRuntimeEnv());
   const tarArgs = [
     "--exclude=node_modules",
@@ -67,8 +69,8 @@ try {
   }
   await run("tar", tarArgs);
 
-  await run("ssh", [...sshArgs, remote, `mkdir -p ${shellQuote(deployDir)}`], {
-    errorHint: "SSH connection failed. Check VPS_HOST, VPS_USER, VPS_PORT, and VPS_SSH_KEY."
+  await run("ssh", [...sshTtyArgs, remote, runAsRoot(`mkdir -p ${shellQuote(deployDir)}`)], {
+    errorHint: "SSH connection or deploy directory setup failed. Check VPS_HOST, VPS_USER, VPS_PORT, VPS_SSH_KEY, and remote sudo access."
   });
 
   await run("scp", [...scpArgs, bootstrapScript, `${remote}:/tmp/carto-bootstrap-vps.sh`], {
@@ -78,20 +80,26 @@ try {
     errorHint: "VPS bootstrap failed. The script supports apt-get, dnf, yum, or apk servers with sudo access."
   });
 
-  await run("scp", [...scpArgs, archive, `${remote}:${deployDir}/storefront.tgz`], {
-    errorHint: "Upload failed. Check remote directory permissions or choose another VPS_DEPLOY_DIR."
+  await run("scp", [...scpArgs, archive, `${remote}:${remoteArchive}`], {
+    errorHint: "Archive upload failed. Check SSH and remote /tmp permissions."
   });
-  await run("scp", [...scpArgs, runtimeEnv, `${remote}:${deployDir}/.env`], {
-    errorHint: "Runtime environment upload failed. Check remote directory permissions."
+  await run("scp", [...scpArgs, runtimeEnv, `${remote}:${remoteRuntimeEnv}`], {
+    errorHint: "Runtime environment upload failed. Check SSH and remote /tmp permissions."
+  });
+  await run("ssh", [...sshTtyArgs, remote, runAsRoot([
+    `mv ${shellQuote(remoteArchive)} ${shellQuote(deployDir)}/storefront.tgz`,
+    `mv ${shellQuote(remoteRuntimeEnv)} ${shellQuote(deployDir)}/.env`
+  ].join(" && "))], {
+    errorHint: "Moving uploaded files into VPS_DEPLOY_DIR failed. Check remote sudo access and VPS_DEPLOY_DIR."
   });
 
-  await run("ssh", [...sshArgs, remote, [
+  await run("ssh", [...sshTtyArgs, remote, runAsRoot([
     `cd ${shellQuote(deployDir)}`,
     "tar -xzf storefront.tgz",
     "export PATH=/usr/local/carto-node/bin:/usr/local/bin:$PATH",
     "npm install --omit=dev --no-audit --no-fund --prefer-offline --maxsockets=1",
     `set -a && . ./.env && set +a && export HOST=127.0.0.1 && export PORT=${shellQuote(appPort)} && (pm2 describe ${shellQuote(appName)} >/dev/null && pm2 restart ${shellQuote(appName)} --update-env || pm2 start dist/server/entry.mjs --name ${shellQuote(appName)} --update-env)`
-  ].join(" && ")], {
+  ].join(" && "))], {
     errorHint: "Remote install or PM2 start failed. Check PM2 logs on the VPS."
   });
 
@@ -121,12 +129,12 @@ async function maybeWriteCaddyConfig(domain, upstreamPort) {
   const tmpFile = join(tmpdir(), `Caddyfile.${Date.now()}`);
   await writeFile(tmpFile, caddyfile);
   await run("scp", [...scpArgs, tmpFile, `${remote}:/tmp/carto.Caddyfile`]);
-  await run("ssh", [...sshTtyArgs, remote, [
+  await run("ssh", [...sshTtyArgs, remote, runAsRoot([
     "CADDY_BIN=\"$(command -v caddy || command -v /usr/local/bin/caddy || command -v /usr/bin/caddy)\"",
-    "sudo mv /tmp/carto.Caddyfile /etc/caddy/Caddyfile",
-    "sudo \"$CADDY_BIN\" validate --config /etc/caddy/Caddyfile",
-    "sudo systemctl reload caddy || sudo systemctl restart caddy"
-  ].join(" && ")], {
+    "mv /tmp/carto.Caddyfile /etc/caddy/Caddyfile",
+    "\"$CADDY_BIN\" validate --config /etc/caddy/Caddyfile",
+    "systemctl reload caddy || systemctl restart caddy"
+  ].join(" && "))], {
     errorHint: "Caddy config failed. Check DNS, ports 80/443, and Caddy logs manually."
   });
 }
@@ -163,6 +171,10 @@ function loadEnv(path) {
 
 function shellQuote(value) {
   return `'${String(value).replaceAll("'", "'\\''")}'`;
+}
+
+function runAsRoot(command) {
+  return `if [ "$(id -u)" -eq 0 ]; then sh -lc ${shellQuote(command)}; else sudo -H sh -lc ${shellQuote(command)}; fi`;
 }
 
 function buildRuntimeEnv() {

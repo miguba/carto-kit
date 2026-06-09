@@ -142,10 +142,5 @@ export type SiteConfig = {
   legalName: string;
   domain: string;
   supportEmail: string;
-  privacyEmail: string;
-  supportResponseTime: string;
-  policyUpdatedAt: string;
-  copyrightYear: string;
   cdnBaseUrl?: string | null;
-  registeredAddress?: string;
 };

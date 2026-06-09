@@ -1,68 +1,72 @@
 ---
-import PolicyPage from '@/components/PolicyPage.astro';
-import BaseLayout from '@/layouts/BaseLayout.astro';
-import { getSiteConfigFromServer } from '@/lib/commerce';
+import PolicyPage from "@/components/PolicyPage.astro";
+import BaseLayout from "@/layouts/BaseLayout.astro";
+import defaultPolicyMarkdown from "@/content/policies/shipping-policy.md?raw";
+import { getSiteConfigFromServer } from "@/lib/commerce";
+import { loadPolicyBlock } from "@/lib/policy-block";
+import { siteAbsoluteUrl } from "@/lib/seo";
+
+export const prerender = false;
+
+const POLICY_BLOCK_KEY = "shipping-policy";
 
 const site = await getSiteConfigFromServer();
+const canonicalUrl = siteAbsoluteUrl("/shipping-policy", site.domain, Astro.url.origin);
 
 const contactMethods = [
-  { label: 'Shipping questions', value: site.supportEmail, href: `mailto:${site.supportEmail}` },
-  { label: 'Order tracking', value: 'Contact us', href: '/contact-us' },
+  {
+    label: "Shipping questions",
+    value: site.supportEmail,
+    href: `mailto:${site.supportEmail}`,
+  },
+  { label: "Order tracking", value: "Contact us", href: "/contact-us" },
 ];
 
-const sections = [
-  {
-    title: 'Processing Time',
-    body: 'Orders are typically processed and dispatched within 1–2 business days after payment confirmation. During peak seasons or promotional events, processing may take up to 3 business days.',
-  },
-  {
-    title: 'Where We Ship From',
-    body: 'All orders are fulfilled from our warehouse located in the United States. Once your order is processed, it will be shipped directly from our US-based facility to your delivery address.',
-  },
-  {
-    title: 'Estimated Delivery Time',
-    body: 'Once dispatched, most orders arrive within 10–15 business days depending on the destination and shipping method. Delivery times may vary based on local customs procedures, remote areas, or carrier conditions beyond our control.',
-    items: [
-      'Standard Shipping: 10–15 business days after dispatch.',
-      'Delivery timeframes are estimates, not guarantees. Actual delivery may vary due to carrier logistics, customs clearance, or local holidays.',
-      'Orders placed on weekends or public holidays will be processed on the next business day.',
-    ],
-  },
-  {
-    title: 'Shipping Rates',
-    body: 'We currently offer free standard shipping on all orders. No additional shipping charges will be applied at checkout.',
-  },
-  {
-    title: 'Shipping Coverage',
-    body: 'We ship to most countries and regions worldwide. If your location is not supported during checkout, please contact our support team for assistance.',
-  },
-  {
-    title: 'Order Tracking',
-    body: 'Once your order has been dispatched, you will receive a confirmation email with tracking information when available. You can also contact our support team with your order number for delivery status updates.',
-  },
-  {
-    title: 'Delivery Issues',
-    body: 'If your order has not arrived within the estimated timeframe, or if the package appears damaged upon delivery, please contact us as soon as possible.',
-    items: [
-      'For delayed shipments, please allow an additional 3–5 business days before reaching out, as occasional carrier delays can occur.',
-      'For damaged or missing items, contact our support team with your order number and any relevant photos so we can resolve the issue promptly.',
-    ],
-  },
-];
+const policy = await loadPolicyBlock({
+  key: POLICY_BLOCK_KEY,
+  defaultMarkdown: defaultPolicyMarkdown,
+  fallbackTitle: "Shipping Policy",
+  fallbackIntro:
+    "Everything you need to know about our shipping process, estimated delivery times, and how to track your order.",
+  fallbackDescription: `Learn about ${site.name} shipping times, delivery coverage, tracking, and free shipping details.`,
+  siteName: site.name,
+});
+
+const breadcrumbSchema = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    {
+      "@type": "ListItem",
+      position: 1,
+      name: "Home",
+      item: siteAbsoluteUrl("/", site.domain, Astro.url.origin),
+    },
+    {
+      "@type": "ListItem",
+      position: 2,
+      name: policy.title,
+      item: canonicalUrl,
+    },
+  ],
+};
 ---
 
 <BaseLayout
-  title={`Shipping Policy | ${site.name}`}
-  description={`Learn about ${site.name} shipping times, delivery coverage, tracking, and free shipping details.`}
+  title={`${policy.seoTitle} | ${site.name}`}
+  description={policy.pageDescription}
+  canonicalUrl={canonicalUrl}
 >
+  <script is:inline type="application/ld+json" set:html={JSON.stringify(breadcrumbSchema)} />
   <PolicyPage
-    eyebrow="Shipping"
-    title="Shipping Policy"
-    intro="Everything you need to know about our shipping process, estimated delivery times, and how to track your order."
-    updated={site.policyUpdatedAt}
-    sections={sections}
-    asideTitle="Questions about your order?"
-    asideText="If your order is delayed or you need shipping assistance, reach out with your order number and we will help."
+    eyebrow={policy.eyebrow}
+    title={policy.title}
+    intro={policy.intro}
+    updated={policy.updated}
+    contentHtml={policy.contentHtml}
+    contentHeadings={policy.contentHeadings}
+    asideTitle={policy.asideTitle}
+    asideText={policy.asideText}
     contactMethods={contactMethods}
   />
 </BaseLayout>

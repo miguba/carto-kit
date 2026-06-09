@@ -22,6 +22,15 @@ export type ProductVariant = {
   updatedAt: string;
 };
 
+export type ProductSeo = {
+  title?: string;
+  description?: string;
+  keywords?: string[];
+  image?: string;
+  canonicalPath?: string;
+  noindex?: boolean;
+};
+
 export type Product = {
   id: string;
   site: string;
@@ -41,6 +50,7 @@ export type Product = {
   videoUrl?: string | null;
   video_url?: string | null;
   meta?: {
+    seo?: ProductSeo;
     video?: string | null;
     videoUrl?: string | null;
     video_url?: string | null;
@@ -63,6 +73,16 @@ export type Product = {
   maxPrice: number;
   totalStock: number;
 };
+
+export type Block = {
+  key: string;
+  type: string;
+  meta: Record<string, unknown>;
+  content: string;
+  updatedAt: string;
+};
+
+export type BlocksByKey = Record<string, Block>;
 
 export type OrderCustomer = {
   email: string;
