@@ -2,6 +2,51 @@
 
 本文记录 `carto-kit` 仓库发布新版到 npm 的固定流程，适用于模板、CLI 或 wrapper 更新后的版本发布。
 
+## 快速清单
+
+推荐使用脚本发布：
+
+```bash
+npm run release:npm -- --patch --dry-run
+npm run release:npm -- --patch --publish
+```
+
+如果你明确知道目标版本，也可以直接传版本号：
+
+```bash
+npm run release:npm -- 0.1.6 --dry-run
+npm run release:npm -- 0.1.6 --publish
+```
+
+如果 npm 账号要求 2FA：
+
+```bash
+npm run release:npm -- 0.1.6 --publish --otp 123456
+```
+
+脚本默认是 dry run，只有显式传 `--publish` 才会真正发布到 npm。脚本会自动同步两个包的版本、刷新 `package-lock.json`、运行测试和构建、执行 pack/publish dry run，然后按顺序发布 `carto-kit` 和 `create-carto`。
+
+如果忘记上次发到哪个版本，直接用 `--patch`。脚本会读取 npm 上 `carto-kit` / `create-carto` 已发布的最新版本，取最大值后自动加一位 patch。需要发破坏性版本或功能版本时，可以改用 `--major` 或 `--minor`。
+
+自动 bump 以 npm registry 为准，不以本地 `package.json` 为准。如果上一次 `--publish` 中途失败导致本地版本号临时高于 npm 最新版本，脚本会提示这个差异，但仍然按 npm 最新版本计算下一版。
+
+dry run 会临时写入目标版本来检查真实包内容，但结束或失败时会恢复 `package.json` 和 `package-lock.json`。只有 `--publish` 会保留版本号变更并真正发布。
+
+发布后 npm registry 可能短时间内不同步。脚本会等待并重试确认 `carto-kit@<version>` 和 `create-carto@<version>` 的 tarball 都可见。如果只发布成功其中一个包，重复执行同一条 `--publish` 命令即可恢复，脚本会跳过已经存在的包并继续发布缺失的包。
+
+正式 `--publish` 默认要求存在发布相关源码变更，包括 `templates/*`、`packages/carto-kit/src/*`、`packages/carto-kit/scripts/copy-template.mjs` 或 `packages/create-carto-wrapper/cli.js`。如果这些源码没有变化，脚本会拒绝发布空版本。只有两种情况例外：恢复半发布版本，或你显式传 `--force`。
+
+每次发布按这个顺序执行：
+
+1. 确认工作区只包含本次要发布的变更。
+2. 运行 `npm install`、`npm run test`。
+3. 如果改过 `templates/*`，运行 `npm run build`，让发布副本同步到 `packages/carto-kit/templates/*`。
+4. bump `carto-kit` 和 `create-carto` 两个包的版本，并同步 wrapper 依赖。
+5. 运行 `npm install --package-lock-only` 刷新 lockfile。
+6. 运行 pack 和 publish dry run。
+7. 先发布 `carto-kit`，再发布 `create-carto`。
+8. 用 `npm view` 和干净临时目录验证 npm 侧结果。
+
 ## 发布包
 
 当前仓库发布两个 npm 包：
@@ -10,6 +55,22 @@
 - `packages/create-carto-wrapper` 发布为 `create-carto`，用于支持 `npm create carto@latest`。
 
 发布顺序必须是先发布 `carto-kit`，再发布 `create-carto`，因为 `create-carto` 依赖指定版本的 `carto-kit`。
+
+## 源文件边界
+
+- 模板开发源文件在 `templates/*`。
+- npm 包实际发布的模板副本在 `packages/carto-kit/templates/*`。
+- `packages/carto-kit/scripts/copy-template.mjs` 负责在构建时同步模板副本，并过滤本地运行产物。
+
+因此，模板改动的发布路径是：
+
+```bash
+# 修改 templates/*
+npm run build
+# 再检查 packages/carto-kit/templates/* 是否已刷新
+```
+
+不要手动只改 `packages/carto-kit/templates/*` 后发布，否则源码模板和发布模板会分叉。
 
 ## 1. 发布前检查
 
@@ -20,6 +81,14 @@ npm install
 npm run test
 ```
 
+再确认当前工作区状态：
+
+```bash
+git status --short
+```
+
+这里不要求工作区必须干净，但要确认每个待发布变更都属于本次版本。不要把临时文件、测试输出或无关修改带进 npm 包。
+
 如果刚更新过模板，必须执行构建：
 
 ```bash
@@ -29,6 +98,14 @@ npm run build
 `npm run build` 会构建 CLI，并把 `templates/*` 同步到 `packages/carto-kit/templates/*`。发布包使用的是 `packages/carto-kit/templates/*`，所以模板更新后不能跳过这一步。
 
 ## 2. 修改版本号
+
+先查看当前版本：
+
+```bash
+npm pkg get version --workspace carto-kit
+npm pkg get version --workspace create-carto
+npm pkg get dependencies.carto-kit --workspace create-carto
+```
 
 假设要从 `0.1.4` 发布到 `0.1.5`，需要修改两个文件。
 
@@ -60,6 +137,14 @@ npm install --package-lock-only
 ```
 
 如果 npm 报目标版本已存在，继续 bump 到一个 npm 上不存在的新版本。npm 已发布版本不能覆盖。
+
+可选：修改后再次确认三个版本值一致：
+
+```bash
+npm pkg get version --workspace carto-kit
+npm pkg get version --workspace create-carto
+npm pkg get dependencies.carto-kit --workspace create-carto
+```
 
 ## 3. dry run 检查包内容
 

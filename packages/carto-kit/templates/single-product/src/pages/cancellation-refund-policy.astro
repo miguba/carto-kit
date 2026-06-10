@@ -1,67 +1,56 @@
 ---
 import PolicyPage from '@/components/PolicyPage.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
+import defaultPolicyMarkdown from '@/content/policies/cancellation-refund-policy.md?raw';
+import { getCommerceConfigFromServer } from '@/lib/commerce';
+import { loadPolicyBlock } from '@/lib/policy-block';
 
-const contactMethods = [
-  { label: 'Support email', value: 'support@office.dibsale.com', href: 'mailto:support@office.dibsale.com' },
-  { label: 'Order help', value: 'Contact us', href: '/contact-us' },
-];
+const POLICY_BLOCK_KEY = 'cancellation-refund-policy';
 
-const sections = [
-  {
-    title: 'Order Cancellations',
-    body: 'You may request cancellation before an order has been processed or dispatched. Because many products are prepared quickly after payment confirmation, please contact us as soon as possible with your order number.',
-    items: [
-      'If the order has not entered fulfillment, we will cancel it and return the payment to the original payment method.',
-      'If the order has already shipped or delivery details have already been issued, the order may no longer be cancellable.',
-      'Digital delivery, activation, license, or made-to-order items may be treated as fulfilled once access details are sent.',
-    ],
+const { site } = await getCommerceConfigFromServer();
+
+const policy = await loadPolicyBlock({
+  key: POLICY_BLOCK_KEY,
+  defaultMarkdown: defaultPolicyMarkdown,
+  fallbackTitle: 'Cancellation & Refund Policy',
+  fallbackIntro:
+    'A clear guide to when orders can be cancelled, how refund requests are reviewed, and what to expect after a request is approved.',
+  fallbackDescription: `Review ${site.name} cancellation, refund eligibility, refund timing, and dispute handling policies.`,
+  siteName: site.name,
+  variables: {
+    siteName: site.name,
+    supportEmail: site.supportEmail,
   },
-  {
-    title: 'Refund Eligibility',
-    body: 'Refunds are reviewed case by case so we can confirm the order status, payment record, and any delivery or activation history.',
-    items: [
-      'Eligible refund requests generally include duplicate payments, failed delivery, unavailable products, or verified order errors.',
-      'Refund requests should be submitted within 14 days of purchase unless local consumer law requires a longer period.',
-      'We may ask for screenshots, order details, or a short description of the issue to help us review the request.',
-    ],
-  },
-  {
-    title: 'Non-Refundable Situations',
-    items: [
-      'Products that have been successfully delivered, activated, redeemed, downloaded, or otherwise consumed may not be refundable.',
-      'Refunds may be declined when the customer provides incorrect contact or delivery information and the order has already been fulfilled.',
-      'We cannot refund charges caused by third-party payment fees, bank fees, foreign exchange movement, or account restrictions outside our control.',
-    ],
-  },
-  {
-    title: 'How Refunds Are Processed',
-    body: 'Approved refunds are sent back through the original payment channel whenever possible.',
-    items: [
-      'Refund processing usually begins within 3 business days after approval.',
-      'Your bank, card issuer, or PayPal account may take additional time to post the funds.',
-      'We will email you when the request is approved, denied, or requires more information.',
-    ],
-  },
-  {
-    title: 'Chargebacks and Disputes',
-    body: 'If you open a payment dispute, we may be required to respond through the payment provider instead of processing a direct refund. Contacting us first is usually the fastest way to resolve order issues.',
-  },
-];
+});
 ---
 
 <BaseLayout
-  title="Cancellation & Refund Policy | 365 Deal"
-  description="Review 365 Deal cancellation, refund eligibility, refund timing, and dispute handling policies."
+  title={`${policy.seoTitle} | ${site.name}`}
+  description={policy.pageDescription}
+  canonicalPath="/cancellation-refund-policy"
+  jsonLd={[{
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: policy.title,
+    description: policy.pageDescription,
+    breadcrumb: {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: '/' },
+        { '@type': 'ListItem', position: 2, name: policy.title },
+      ],
+    },
+  }]}
 >
   <PolicyPage
-    eyebrow="Policy"
-    title="Cancellation & Refund Policy"
-    intro="A clear guide to when orders can be cancelled, how refund requests are reviewed, and what to expect after a request is approved."
-    updated="May 20, 2026"
-    sections={sections}
-    asideTitle="Start with your order number"
-    asideText="Send us your order number and a short description of the issue so we can check payment and fulfillment status quickly."
-    contactMethods={contactMethods}
+    eyebrow={policy.eyebrow}
+    title={policy.title}
+    intro={policy.intro}
+    updated={policy.updated}
+    contentHtml={policy.contentHtml}
+    contentHeadings={policy.contentHeadings}
+    asideTitle={policy.asideTitle}
+    asideText={policy.asideText}
+    contactMethods={policy.contactMethods}
   />
 </BaseLayout>

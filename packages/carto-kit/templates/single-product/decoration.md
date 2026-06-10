@@ -116,3 +116,84 @@ footer:
 For a compact Block, the same fields can be placed directly at the frontmatter
 top level. If `footer.copyright` is missing, the Markdown body is used as the
 copyright line.
+
+## Policy Page Blocks
+
+The footer policy/support links are static routes in the template, but their
+page content can be maintained in EMS with Blocks. If a matching Block is
+missing, the template uses the default Markdown files in
+`src/content/policies/`.
+
+Create one Block for each page you want to override:
+
+| Page | Block key | Type |
+| --- | --- | --- |
+| `/cancellation-refund-policy` | `cancellation-refund-policy` | `policy` |
+| `/privacy-policy` | `privacy-policy` | `policy` |
+| `/terms-conditions` | `terms-conditions` | `policy` |
+| `/contact-us` | `contact-us` | `policy` |
+
+Preferred format:
+
+```md
+---
+type: policy
+eyebrow: Privacy
+title: Privacy Policy
+intro: This policy explains what information we collect and how we use it.
+updated: May 20, 2026
+seo:
+  title: Privacy Policy
+  description: Learn how this store collects, uses, and protects customer information.
+aside:
+  title: Questions about your data?
+  text: Contact support for privacy, correction, or deletion requests.
+contactMethods:
+  - label: Privacy requests
+    value: support@example.com
+    href: mailto:support@example.com
+  - label: General support
+    value: support@example.com
+    href: mailto:support@example.com
+---
+
+## Information We Collect
+
+We collect information needed to process orders, provide support, and improve
+the storefront.
+
+- Contact details such as name, email, and phone number.
+- Order details such as purchased product, quantity, and payment status.
+
+## Your Choices
+
+You may ask us to access, correct, or delete certain personal information where
+applicable law allows.
+```
+
+Supported frontmatter fields:
+
+- `eyebrow`: Small label above the page title. Defaults to `Policy`.
+- `title`: Visible page title and fallback SEO title.
+- `intro`: Intro paragraph in the hero section.
+- `updated`: Optional last-updated label. If omitted and the EMS Block has
+  `updatedAt`, the template formats `updatedAt`.
+- `seo.title`: HTML title before the site name.
+- `seo.description`: Meta description and Open Graph/Twitter description.
+- `aside.title`: Title in the customer-care aside card.
+- `aside.text`: Description in the customer-care aside card.
+- `contactMethods`: The contact rows in the customer-care aside card. Each item
+  supports `label`, `value`, and optional `href`.
+
+For local template defaults, `{{siteName}}` and `{{supportEmail}}` can be used
+inside frontmatter strings. They are replaced with values from the EMS commerce
+config. EMS-authored Blocks can either use literal values or the same
+placeholders.
+
+The old flat fields `seoTitle`, `seoDescription`, `asideTitle`, and `asideText`
+are still accepted for compatibility, but new Blocks should use the nested
+`seo` and `aside` objects.
+
+The Markdown body is rendered as the main page content. Level-two headings
+(`## Heading`) become the "On this page" navigation entries, and unordered or
+ordered lists render with visible markers.
