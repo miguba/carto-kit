@@ -1,16 +1,25 @@
 ---
 import CheckoutForm from '@/components/CheckoutForm';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { getCommerceConfigFromServer, getProduct } from '@/lib/commerce';
+import {
+  getCachedCommerceConfigFromServer,
+  getCachedProduct,
+} from '@/lib/commerce';
 import { getCommerceConfig } from '@/lib/config';
+import { getPageCacheBinding } from '@/lib/page-cache-binding';
 import type { Product, ProductVariant } from '@/lib/types';
 
 export const prerender = false;
 
 const slug = Astro.url.searchParams.get('slug') || '';
 const sku = Astro.url.searchParams.get('sku') || '';
-const quantity = Math.max(1, Number(Astro.url.searchParams.get('quantity') || '1'));
+const quantity = Math.max(
+  1,
+  Number(Astro.url.searchParams.get('quantity') || '1'),
+);
 const { mapboxAccessToken } = getCommerceConfig();
+const refreshCache = Astro.url.searchParams.get('___refresh___') === '1';
+const pageCacheBinding = await getPageCacheBinding();
 
 let product: Product | null = null;
 let variant: ProductVariant | null = null;
@@ -22,8 +31,14 @@ if (!slug || !sku || !Number.isInteger(quantity) || quantity < 1) {
 } else {
   try {
     const [config, loadedProduct] = await Promise.all([
-      getCommerceConfigFromServer(),
-      getProduct(slug),
+      getCachedCommerceConfigFromServer({
+        refresh: refreshCache,
+        kvCache: pageCacheBinding,
+      }),
+      getCachedProduct(slug, {
+        refresh: refreshCache,
+        kvCache: pageCacheBinding,
+      }),
     ]);
 
     paypalClientId = config.payments.paypal.clientId;

@@ -19,20 +19,53 @@ import { getHomeSeo } from "@/lib/site-seo";
 import { siteAbsoluteUrl } from "@/lib/seo";
 import { getBrandLogo } from "@/lib/brand";
 import type { Product } from "@/lib/types";
+import { cachePage } from "@/lib/cache-page";
+import { getPageCacheBinding } from "@/lib/page-cache-binding";
 
 export const prerender = false;
 
-const site = await getSiteConfigFromServer();
+type HomeCacheData = {
+  site: Awaited<ReturnType<typeof getSiteConfigFromServer>>;
+  products: Product[];
+};
+
 let products: Product[] = [];
 let featuredProduct: Product | null = null;
 let loadError = "";
+let site: HomeCacheData["site"];
+const pageCacheBinding = await getPageCacheBinding();
+const refreshCache = Astro.url.searchParams.get("___refresh___") === "1";
 
 try {
-  products = await getProducts(12);
+  const { data } = await cachePage<HomeCacheData>("page:index", {
+    async fun() {
+      const cacheOptions = {
+        refresh: refreshCache,
+        kvCache: pageCacheBinding,
+      };
+      const [site, products] = await Promise.all([
+        getSiteConfigFromServer(cacheOptions),
+        getProducts(12, cacheOptions),
+      ]);
+
+      return { site, products };
+    },
+    refresh: refreshCache,
+    kvCache: pageCacheBinding,
+  });
+
+  site = data.site;
+  products = data.products;
   featuredProduct = products[0] ?? null;
 } catch (error) {
   loadError =
     error instanceof Error ? error.message : "Unable to load products.";
+  site = {
+    name: "Carto Store",
+    legalName: "Carto Store",
+    domain: "",
+    supportEmail: "",
+  };
 }
 
 const productCount = products.length;

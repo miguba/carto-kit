@@ -1,27 +1,3 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
-  <defs>
-    <linearGradient id="ribbon" x1="30" y1="100" x2="101" y2="29" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ff4d87"/>
-      <stop offset="0.52" stop-color="#f21778"/>
-      <stop offset="1" stop-color="#c514ff"/>
-    </linearGradient>
-    <linearGradient id="corner" x1="23" y1="18" x2="62" y2="57" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ffe45e"/>
-      <stop offset="1" stop-color="#ffba32"/>
-    </linearGradient>
-    <linearGradient id="side" x1="18" y1="56" x2="56" y2="104" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#26f0c3"/>
-      <stop offset="1" stop-color="#10c8dd"/>
-    </linearGradient>
-    <linearGradient id="base" x1="43" y1="109" x2="104" y2="48" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#20c9f4"/>
-      <stop offset="1" stop-color="#5778ff"/>
-    </linearGradient>
-  </defs>
-  <path fill="url(#corner)" d="M15 13h51v43H15z"/>
-  <path fill="url(#side)" d="M15 56h51v59H15z"/>
-  <path fill="url(#base)" d="M66 56h17c20 0 37 13 37 29.5S103 115 83 115H41V74h25z"/>
-  <path fill="url(#ribbon)" d="M88 17c8.3 0 15 6.7 15 15 0 4-1.6 7.8-4.4 10.6L48.6 92.7c-5.9 5.9-15.4 5.9-21.2 0s-5.9-15.4 0-21.2l50-50.1C80.2 18.6 84 17 88 17z"/>
-  <path fill="#fff" fill-opacity="0.17" d="M15 13h51v8H15z"/>
-  <path fill="#fff" fill-opacity="0.18" d="M77.4 21.4C80.2 18.6 84 17 88 17c4.9 0 9.3 2.4 12.1 6.1L32.5 90.8a15 15 0 0 1-5.1-19.3z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 620">
+  <image href="/favicon.png" width="620" height="620" preserveAspectRatio="xMidYMid meet"/>
 </svg>

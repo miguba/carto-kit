@@ -1,9 +1,11 @@
 import { COMMERCE_API_TOKEN } from 'astro:env/server';
+import { cachePage } from './cache-page';
 import {
   getCommerceConfig,
   setCommerceMediaConfig,
   type CommerceMediaConfig,
 } from './config';
+import { getPageCacheBinding } from './page-cache-binding';
 import type {
   ApiResponse,
   CreateOrderRequest,
@@ -15,6 +17,12 @@ import type {
 type RequestOptions = {
   method?: 'GET' | 'POST';
   body?: unknown;
+};
+
+type CacheOptions = {
+  refresh?: boolean;
+  ttl?: number;
+  kvCache?: KVNamespace;
 };
 
 class CommerceApiError extends Error {
@@ -65,10 +73,44 @@ export function getProduct(slug: string) {
   );
 }
 
+export async function getCachedProduct(
+  slug: string,
+  options: CacheOptions = {},
+) {
+  const kvCache = await resolveKvCache(options.kvCache);
+  const { data } = await cachePage<Product>(`product:${slug}`, {
+    async fun() {
+      return getProduct(slug);
+    },
+    refresh: options.refresh,
+    ttl: options.ttl,
+    kvCache,
+  });
+
+  return data;
+}
+
 export function getDecoration(key: string) {
   return commerceRequest<unknown[]>(
     `/api/commerce/decoration?key=${encodeURIComponent(key)}`,
   );
+}
+
+export async function getCachedDecoration(
+  key: string,
+  options: CacheOptions = {},
+) {
+  const kvCache = await resolveKvCache(options.kvCache);
+  const { data } = await cachePage<unknown[]>(`decoration:${key}`, {
+    async fun() {
+      return getDecoration(key);
+    },
+    refresh: options.refresh,
+    ttl: options.ttl,
+    kvCache,
+  });
+
+  return data;
 }
 
 export type CommerceBlock = {
@@ -88,6 +130,29 @@ export function getBlocksByKeys(keys: string[]) {
   return commerceRequest<Record<string, CommerceBlock>>(
     `/api/commerce/blocks?keys=${encodeURIComponent(encodedKeys.join(','))}`,
   );
+}
+
+export async function getCachedBlocksByKeys(
+  keys: string[],
+  options: CacheOptions = {},
+) {
+  const encodedKeys = keys.map((key) => key.trim()).filter(Boolean);
+  if (!encodedKeys.length) {
+    return {} as Record<string, CommerceBlock>;
+  }
+
+  const cacheKey = `blocks:${[...encodedKeys].sort().join(',')}`;
+  const kvCache = await resolveKvCache(options.kvCache);
+  const { data } = await cachePage<Record<string, CommerceBlock>>(cacheKey, {
+    async fun() {
+      return getBlocksByKeys(encodedKeys);
+    },
+    refresh: options.refresh,
+    ttl: options.ttl,
+    kvCache,
+  });
+
+  return data;
 }
 
 export function getOrder(orderNo: string) {
@@ -156,6 +221,26 @@ export async function getCommerceConfigFromServer() {
   };
 }
 
+export async function getCachedCommerceConfigFromServer(
+  options: CacheOptions = {},
+) {
+  const kvCache = await resolveKvCache(options.kvCache);
+  const { data } = await cachePage<
+    Awaited<ReturnType<typeof getCommerceConfigFromServer>>
+  >('commerce-config', {
+    async fun() {
+      return getCommerceConfigFromServer();
+    },
+    refresh: options.refresh,
+    ttl: options.ttl,
+    kvCache,
+  });
+
+  setCommerceMediaConfig(data.media);
+
+  return data;
+}
+
 export type SiteConfig = {
   name: string;
   legalName: string;
@@ -163,3 +248,7 @@ export type SiteConfig = {
   supportEmail: string;
   cdnBaseUrl?: string | null;
 };
+
+async function resolveKvCache(kvCache: KVNamespace | undefined) {
+  return kvCache ?? (await getPageCacheBinding());
+}

@@ -24,8 +24,9 @@ Optional values:
 
 ## Brand Logo
 
-The template includes a default full Joys Box logo image at `/logo.svg`. Store
-owners can keep that default or provide a custom full logo from EMS site config.
+The template includes default Joys Box logo images at `/logo.png` for light
+surfaces and `/logo-light.png` for the dark footer. Store owners can keep those
+defaults or provide a custom full logo from EMS site config.
 
 Recommended EMS site config fields:
 
@@ -37,7 +38,8 @@ logoAlt: Joys Box logo
 
 `logoUrl` may be an absolute URL, a site path such as `/logo.png`, or a relative
 media path served from the configured EMS CDN. If `logoUrl` is empty, the
-storefront falls back to `/logo.svg`.
+storefront falls back to `/logo.png` in the header and checkout, and uses
+`/logo-light.png` in the dark footer.
 
 The storefront renders `logoUrl` as the entire visible brand block in the header,
 footer, and checkout brand bar. `site.name` is still used for page metadata and
@@ -144,6 +146,16 @@ Cloudflare secret, and deploys the Astro server entrypoint. This template
 disables Astro sessions because the storefront does not use server-side session
 storage. Configure a real session driver before using `Astro.session`.
 
+Homepage and product detail data use page-data cache entries that do not expire
+by default. Add `___refresh___=1` to a page URL to force the storefront to fetch
+fresh backend read data and rewrite the cache. For persistent Cloudflare
+caching, create a Workers KV namespace and set
+`CLOUDFLARE_KV_NAMESPACE_ID` in `.env`; the deploy script binds it as
+`KV_STORE`. Without that value, the storefront falls back to in-memory cache for
+local development. Multiple storefront projects can share one KV namespace when
+each project uses a unique `PAGE_CACHE_PREFIX`, which defaults to the site
+domain in generated projects.
+
 ## Deploy To VPS
 
 Set `DEPLOYMENT_TARGET=vps`, fill the `VPS_*` values in `.env`, then run:
@@ -155,6 +167,10 @@ npm run deploy
 The VPS deploy script builds an Astro Node standalone server, uploads the
 runtime bundle, runs `scripts/bootstrap-vps.sh` on the server to install or
 verify Node.js, PM2, and Caddy, then starts the app with PM2 on `VPS_APP_PORT`.
+On VPS, homepage and product detail data are cached on disk under `./.cache` in
+`VPS_DEPLOY_DIR` by default. Set `PAGE_CACHE_DIR` if you want to store that
+cache somewhere else. The deploy script creates the cache directory on the VPS
+before starting PM2.
 If `VPS_CADDY_DOMAIN` is set, the deploy script can write a Caddy site block
 that reverse proxies that domain to `127.0.0.1:VPS_APP_PORT`.
 Multiple Caddy domains are supported with comma separation, for example

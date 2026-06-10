@@ -2,12 +2,15 @@
 import PolicyPage from '@/components/PolicyPage.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import defaultPolicyMarkdown from '@/content/policies/cancellation-refund-policy.md?raw';
-import { getCommerceConfigFromServer } from '@/lib/commerce';
+import { getCachedCommerceConfigFromServer } from '@/lib/commerce';
 import { loadPolicyBlock } from '@/lib/policy-block';
 
 const POLICY_BLOCK_KEY = 'cancellation-refund-policy';
 
-const { site } = await getCommerceConfigFromServer();
+const refreshCache = Astro.url.searchParams.get('___refresh___') === '1';
+const { site } = await getCachedCommerceConfigFromServer({
+  refresh: refreshCache,
+});
 
 const policy = await loadPolicyBlock({
   key: POLICY_BLOCK_KEY,
@@ -21,6 +24,7 @@ const policy = await loadPolicyBlock({
     siteName: site.name,
     supportEmail: site.supportEmail,
   },
+  refresh: refreshCache,
 });
 ---
 
@@ -28,19 +32,21 @@ const policy = await loadPolicyBlock({
   title={`${policy.seoTitle} | ${site.name}`}
   description={policy.pageDescription}
   canonicalPath="/cancellation-refund-policy"
-  jsonLd={[{
-    '@context': 'https://schema.org',
-    '@type': 'WebPage',
-    name: policy.title,
-    description: policy.pageDescription,
-    breadcrumb: {
-      '@type': 'BreadcrumbList',
-      itemListElement: [
-        { '@type': 'ListItem', position: 1, name: 'Home', item: '/' },
-        { '@type': 'ListItem', position: 2, name: policy.title },
-      ],
+  jsonLd={[
+    {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: policy.title,
+      description: policy.pageDescription,
+      breadcrumb: {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Home', item: '/' },
+          { '@type': 'ListItem', position: 2, name: policy.title },
+        ],
+      },
     },
-  }]}
+  ]}
 >
   <PolicyPage
     eyebrow={policy.eyebrow}

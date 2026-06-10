@@ -1,6 +1,8 @@
 import { COMMERCE_API_TOKEN } from "astro:env/server";
 
+import { cachePage } from "./cache-page";
 import { getCommerceConfig, setCommerceMediaConfig, type CommerceMediaConfig } from "./config";
+import { getPageCacheBinding } from "./page-cache-binding";
 import type {
   ApiResponse,
   BlocksByKey,
@@ -13,6 +15,12 @@ import type {
 type RequestOptions = {
   method?: "GET" | "POST";
   body?: unknown;
+};
+
+export type CommerceReadCacheOptions = {
+  refresh?: boolean;
+  ttl?: number;
+  kvCache?: KVNamespace;
 };
 
 export class CommerceApiError extends Error {
@@ -61,30 +69,70 @@ export async function commerceRequest<T>(
   return payload.data;
 }
 
-export function getProduct(slug: string) {
-  return commerceRequest<Product>(
-    `/api/commerce/products/${encodeURIComponent(slug)}`,
+async function cachedCommerceRead<T>(
+  cacheKey: string,
+  fun: () => Promise<T>,
+  { refresh = false, ttl, kvCache }: CommerceReadCacheOptions = {},
+) {
+  const { data } = await cachePage<T>(cacheKey, {
+    fun,
+    refresh,
+    ttl,
+    kvCache: kvCache ?? (await getPageCacheBinding()),
+  });
+
+  return data;
+}
+
+export function getProduct(
+  slug: string,
+  cacheOptions?: CommerceReadCacheOptions,
+) {
+  return cachedCommerceRead(
+    `commerce:product:${slug}`,
+    () =>
+      commerceRequest<Product>(
+        `/api/commerce/products/${encodeURIComponent(slug)}`,
+      ),
+    cacheOptions,
   );
 }
 
-export function getProducts(limit = 12) {
+export function getProducts(
+  limit = 12,
+  cacheOptions?: CommerceReadCacheOptions,
+) {
   const params = new URLSearchParams({
     limit: String(limit),
     offset: "0",
   });
 
-  return commerceRequest<Product[]>(
-    `/api/commerce/products?${params.toString()}`,
+  return cachedCommerceRead(
+    `commerce:products:${limit}:0`,
+    () =>
+      commerceRequest<Product[]>(
+        `/api/commerce/products?${params.toString()}`,
+      ),
+    cacheOptions,
   );
 }
 
-export function getBlocksByKeys(keys: string[]) {
+export function getBlocksByKeys(
+  keys: string[],
+  cacheOptions?: CommerceReadCacheOptions,
+) {
+  const cacheKeys = [...new Set(keys)].sort();
   const params = new URLSearchParams({
-    keys: keys.join(","),
+    keys: cacheKeys.join(","),
   });
 
-  return commerceRequest<BlocksByKey>(
-    `/api/commerce/blocks?${params.toString()}`,
+  return cachedCommerceRead(
+    `commerce:blocks:${cacheKeys.join("|")}`,
+    () =>
+      commerceRequest<BlocksByKey>(
+        `/api/commerce/blocks?${params.toString()}`,
+      ),
+    cacheOptions,
   );
 }
 
@@ -161,8 +209,14 @@ export type CommerceConfigResponse = {
   };
 };
 
-export async function getCommerceConfigFromServer() {
-  const config = await commerceRequest<CommerceConfigResponse>("/api/commerce/config");
+export async function getCommerceConfigFromServer(
+  cacheOptions?: CommerceReadCacheOptions,
+) {
+  const config = await cachedCommerceRead(
+    "commerce:config",
+    () => commerceRequest<CommerceConfigResponse>("/api/commerce/config"),
+    cacheOptions,
+  );
   const mediaConfig = {
     cdnBaseUrl: config.media?.cdnBaseUrl ?? config.site.cdnBaseUrl,
   };
@@ -188,7 +242,9 @@ export type SiteConfig = {
   logoAlt?: string | null;
 };
 
-export async function getSiteConfigFromServer() {
-  const config = await getCommerceConfigFromServer();
+export async function getSiteConfigFromServer(
+  cacheOptions?: CommerceReadCacheOptions,
+) {
+  const config = await getCommerceConfigFromServer(cacheOptions);
   return config.site;
 }

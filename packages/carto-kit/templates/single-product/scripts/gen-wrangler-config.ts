@@ -13,7 +13,7 @@ for (const file of envFiles) {
 
 const appName = normalizeWorkerName(requiredEnv('APP_NAME'));
 const publicVars = pickEnvVars(['APP_NAME', 'PUBLIC_MAPBOX_ACCESS_TOKEN']);
-const serverVars = pickEnvVars(['COMMERCE_API_TOKEN']);
+const serverVars = pickEnvVars(['COMMERCE_API_TOKEN', 'PAGE_CACHE_PREFIX']);
 
 const cfg = {
   $schema: './node_modules/wrangler/config-schema.json',
@@ -32,6 +32,16 @@ const cfg = {
     ? { vars: { ...publicVars, ...serverVars } }
     : {}),
 };
+
+const kvNamespaceId = process.env.CLOUDFLARE_KV_NAMESPACE_ID;
+if (kvNamespaceId) {
+  cfg.kv_namespaces = [
+    {
+      binding: 'KV_STORE',
+      id: kvNamespaceId,
+    },
+  ];
+}
 
 fs.writeFileSync('wrangler.jsonc', `${JSON.stringify(cfg, null, 2)}\n`);
 console.log(`[gen] wrote wrangler.jsonc for ${nodeEnv}`);

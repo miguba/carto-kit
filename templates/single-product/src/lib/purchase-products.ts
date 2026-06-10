@@ -1,4 +1,4 @@
-import { getDecoration, getProduct } from './commerce';
+import { getCachedDecoration, getCachedProduct } from './commerce';
 import type { Product } from './types';
 
 const PURCHASE_PRODUCTS_DECORATION_KEY = 'purchase-products';
@@ -43,14 +43,25 @@ export type PurchaseProducts = {
   items: PurchaseProductItem[];
 };
 
-export async function getPurchaseProducts(): Promise<PurchaseProducts> {
-  const decoration = await getDecoration(PURCHASE_PRODUCTS_DECORATION_KEY);
+type PurchaseProductsOptions = {
+  refresh?: boolean;
+  ttl?: number;
+  kvCache?: KVNamespace;
+};
+
+export async function getPurchaseProducts(
+  options: PurchaseProductsOptions = {},
+): Promise<PurchaseProducts> {
+  const decoration = await getCachedDecoration(
+    PURCHASE_PRODUCTS_DECORATION_KEY,
+    options,
+  );
   const config = parsePurchaseProductsDecoration(decoration);
   const items = await Promise.all(
     config.items.map(async (item) => {
       let product: Product;
       try {
-        product = await getProduct(item.slug);
+        product = await getCachedProduct(item.slug, options);
       } catch (error) {
         const message =
           error instanceof Error ? error.message : 'Unable to load product.';

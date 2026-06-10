@@ -1,7 +1,13 @@
 ---
 import ProductPurchasePanel from "@/components/ProductPurchasePanel";
 import BaseLayout from "@/layouts/BaseLayout.astro";
-import { getCommerceConfigFromServer, getProduct, getProducts } from "@/lib/commerce";
+import {
+  getCommerceConfigFromServer,
+  getProducts,
+} from "@/lib/commerce";
+import { cachePage } from "@/lib/cache-page";
+import { getPageCacheBinding } from "@/lib/page-cache-binding";
+import { getCachedProduct } from "@/lib/product-cache";
 import {
   IMAGE_PRESETS,
   formatMoney,
@@ -21,27 +27,66 @@ import type { Product } from "@/lib/types";
 
 export const prerender = false;
 
-const commerceConfig = await getCommerceConfigFromServer();
-const site = commerceConfig.site;
+type ProductCacheData = {
+  commerceConfig: Awaited<ReturnType<typeof getCommerceConfigFromServer>>;
+  product: Product | null;
+  relatedProducts: Product[];
+};
+
 const slug = String(Astro.params.slug ?? "");
 let product: Product | null = null;
 let relatedProducts: Product[] = [];
 let loadError = "";
+let commerceConfig: ProductCacheData["commerceConfig"];
+const pageCacheBinding = await getPageCacheBinding();
+const refreshCache = Astro.url.searchParams.get("___refresh___") === "1";
 
 try {
-  product = slug ? await getProduct(slug) : null;
-  if (!product) {
+  if (!slug) {
     loadError = "Missing product slug.";
   } else {
-    const products = await getProducts(8);
-    relatedProducts = products
-      .filter((item) => item.slug !== product?.slug)
-      .slice(0, 4);
+    const { data } = await cachePage<ProductCacheData>(`page:product:${slug}`, {
+      async fun() {
+        const cacheOptions = {
+          refresh: refreshCache,
+          kvCache: pageCacheBinding,
+        };
+        const [commerceConfig, product, products] = await Promise.all([
+          getCommerceConfigFromServer(cacheOptions),
+          getCachedProduct(slug, cacheOptions),
+          getProducts(8, cacheOptions),
+        ]);
+
+        return {
+          commerceConfig,
+          product,
+          relatedProducts: products
+            .filter((item) => item.slug !== product?.slug)
+            .slice(0, 4),
+        };
+      },
+      refresh: refreshCache,
+      kvCache: pageCacheBinding,
+    });
+
+    commerceConfig = data.commerceConfig;
+    product = data.product;
+    relatedProducts = data.relatedProducts;
+
+    if (!product) {
+      loadError = "Missing product slug.";
+    }
   }
 } catch (error) {
   loadError =
     error instanceof Error ? error.message : "Unable to load product.";
 }
+
+commerceConfig ??= await getCommerceConfigFromServer({
+  refresh: refreshCache,
+  kvCache: pageCacheBinding,
+});
+const site = commerceConfig.site;
 
 const images = product ? productImages(product) : [];
 const sellingPoints = product ? productSellingPoints(product) : [];

@@ -1,14 +1,19 @@
 import type { APIRoute } from 'astro';
-import { getProduct } from '@/lib/commerce';
+import { getCachedProduct } from '@/lib/commerce';
 
 export const prerender = false;
 
-export const GET: APIRoute = async ({ params }) => {
+export const GET: APIRoute = async ({ params, url }) => {
   try {
-    const product = await getProduct(String(params.slug || ''));
+    const product = await getCachedProduct(String(params.slug || ''), {
+      refresh: url.searchParams.get('___refresh___') === '1',
+    });
     return json({ success: true, data: product });
   } catch (error) {
-    return json({ success: false, data: getErrorMessage(error) }, getStatus(error));
+    return json(
+      { success: false, data: getErrorMessage(error) },
+      getStatus(error),
+    );
   }
 };
 
@@ -26,7 +31,12 @@ function getErrorMessage(error: unknown) {
 }
 
 function getStatus(error: unknown) {
-  if (error && typeof error === 'object' && 'status' in error && typeof error.status === 'number') {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'status' in error &&
+    typeof error.status === 'number'
+  ) {
     return error.status;
   }
 

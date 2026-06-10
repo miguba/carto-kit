@@ -1,4 +1,4 @@
-import { getBlocksByKeys } from './commerce';
+import { getCachedBlocksByKeys } from './commerce';
 import {
   extractMarkdownHeadings,
   markdownToPlainText,
@@ -14,6 +14,9 @@ type LoadPolicyBlockOptions = {
   fallbackDescription: string;
   siteName: string;
   variables?: Record<string, string>;
+  refresh?: boolean;
+  ttl?: number;
+  kvCache?: KVNamespace;
 };
 
 type ContactMethod = {
@@ -30,8 +33,11 @@ export async function loadPolicyBlock({
   fallbackDescription,
   siteName,
   variables = {},
+  refresh,
+  ttl,
+  kvCache,
 }: LoadPolicyBlockOptions) {
-  const blocks = await getBlocksByKeys([key]);
+  const blocks = await getCachedBlocksByKeys([key], { refresh, ttl, kvCache });
   const block = blocks[key];
   const markdown = block?.content ?? defaultMarkdown;
   const parsed = parseMarkdownFrontmatter(markdown);

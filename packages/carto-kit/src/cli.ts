@@ -30,6 +30,9 @@ async function main(): Promise<void> {
       "api-base-url": { type: "string" },
       "cloudflare-account-id": { type: "string" },
       "cloudflare-api-token": { type: "string" },
+      "cloudflare-kv-namespace-id": { type: "string" },
+      "page-cache-dir": { type: "string" },
+      "page-cache-prefix": { type: "string" },
       template: { type: "string" },
       deploy: { type: "string" },
       yes: { type: "boolean", short: "y" },
@@ -82,8 +85,28 @@ async function main(): Promise<void> {
   if (answers.deploymentTarget === "cloudflare-workers") {
     console.log(`  ${run} deploy`);
   }
+  printCacheConfigurationSteps(answers.deploymentTarget);
   console.log("");
   console.log("Secrets were written to .env and were not printed.");
+}
+
+function printCacheConfigurationSteps(deploymentTarget: CliOptions["deploy"]): void {
+  if (deploymentTarget === "cloudflare-workers") {
+    console.log("");
+    console.log(kleur.bold("Cache configuration:"));
+    console.log("  Create a Cloudflare Workers KV namespace for persistent page-data cache.");
+    console.log("  Set CLOUDFLARE_KV_NAMESPACE_ID in .env before running deploy.");
+    console.log("  Keep PAGE_CACHE_PREFIX unique per project when sharing one KV namespace.");
+    console.log("  The deploy script binds that namespace as KV_STORE.");
+    return;
+  }
+
+  if (deploymentTarget === "vps") {
+    console.log("");
+    console.log(kleur.bold("Cache configuration:"));
+    console.log("  Page-data cache is stored under ./.cache by default.");
+    console.log("  Set PAGE_CACHE_DIR in .env if you want to store the cache somewhere else.");
+  }
 }
 
 function parseOptions(values: Record<string, string | boolean | undefined>): CliOptions {
@@ -93,6 +116,10 @@ function parseOptions(values: Record<string, string | boolean | undefined>): Cli
     commerceApiBaseUrl: typeof values["api-base-url"] === "string" ? values["api-base-url"] : undefined,
     cloudflareAccountId: typeof values["cloudflare-account-id"] === "string" ? values["cloudflare-account-id"] : undefined,
     cloudflareApiToken: typeof values["cloudflare-api-token"] === "string" ? values["cloudflare-api-token"] : undefined,
+    cloudflareKvNamespaceId:
+      typeof values["cloudflare-kv-namespace-id"] === "string" ? values["cloudflare-kv-namespace-id"] : undefined,
+    pageCacheDir: typeof values["page-cache-dir"] === "string" ? values["page-cache-dir"] : undefined,
+    pageCachePrefix: typeof values["page-cache-prefix"] === "string" ? values["page-cache-prefix"] : undefined,
     yes: values.yes === true
   };
 
@@ -210,6 +237,12 @@ Options:
                        Cloudflare account ID for Cloudflare deploys
   --cloudflare-api-token <token>
                        Cloudflare API token for Cloudflare deploys
+  --cloudflare-kv-namespace-id <id>
+                       Optional Workers KV namespace ID for persistent page-data cache
+  --page-cache-dir <path>
+                       Optional VPS page cache directory, defaults to ./.cache
+  --page-cache-prefix <prefix>
+                       Cache key prefix for sharing one KV namespace across projects
   --template <name>    Template ID: ${templates.join(", ")}
   --deploy <target>    Deployment target: ${deploymentTargets.join(", ")}
   -y, --yes            Accept defaults for optional prompts

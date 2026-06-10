@@ -98,7 +98,10 @@ try {
     "tar -xzf storefront.tgz",
     "export PATH=/usr/local/carto-node/bin:/usr/local/bin:$PATH",
     "npm install --omit=dev --no-audit --no-fund --prefer-offline --maxsockets=1",
-    `set -a && . ./.env && set +a && export HOST=127.0.0.1 && export PORT=${shellQuote(appPort)} && (pm2 describe ${shellQuote(appName)} >/dev/null && pm2 restart ${shellQuote(appName)} --update-env || pm2 start dist/server/entry.mjs --name ${shellQuote(appName)} --update-env)`
+    "set -a && . ./.env && set +a",
+    "CACHE_DIR=\"${PAGE_CACHE_DIR:-./.cache}\"",
+    "case \"$CACHE_DIR\" in /*) mkdir -p \"$CACHE_DIR\" ;; *) mkdir -p \"$PWD/$CACHE_DIR\" ;; esac",
+    `export HOST=127.0.0.1 && export PORT=${shellQuote(appPort)} && (pm2 describe ${shellQuote(appName)} >/dev/null && pm2 restart ${shellQuote(appName)} --update-env || pm2 start dist/server/entry.mjs --name ${shellQuote(appName)} --update-env)`
   ].join(" && "))], {
     errorHint: "Remote install or PM2 start failed. Check PM2 logs on the VPS."
   });
@@ -184,6 +187,8 @@ function buildRuntimeEnv() {
     "DEPLOYMENT_TARGET",
     "COMMERCE_API_TOKEN",
     "PUBLIC_MAPBOX_ACCESS_TOKEN",
+    "PAGE_CACHE_PREFIX",
+    "PAGE_CACHE_DIR",
     "EMS_SITE_DOMAIN",
     "PUBLIC_SITE_URL",
     "PRODUCT_DETAIL_URL_TEMPLATE",

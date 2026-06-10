@@ -139,3 +139,20 @@ npm run deploy:vps
 The deploy script builds the Astro app, uploads the build output to the server,
 bootstraps Node.js, PM2, and Caddy, installs production dependencies, and
 serves the app behind Caddy when `VPS_CADDY_DOMAIN` is configured.
+
+## Backend Data Cache
+
+Homepage data, product reads, commerce config, policy/footer Blocks, and local
+read proxies under `/api/commerce/*` use the shared page-data cache. Add
+`___refresh___=1` to a URL to bypass and refresh the cache for that request.
+
+On Cloudflare Workers, create a Workers KV namespace and set
+`CLOUDFLARE_KV_NAMESPACE_ID` before deploy; the generated `wrangler.jsonc` binds
+it as `KV_STORE`. Without a KV namespace, local development falls back to
+in-memory cache. Multiple storefront projects can share one KV namespace when
+each project uses a unique `PAGE_CACHE_PREFIX`, which defaults to the site
+domain in generated projects.
+
+On VPS, set `DEPLOYMENT_TARGET=vps`. Cached data is stored on disk under
+`./.cache` by default, or under `PAGE_CACHE_DIR` when that variable is set.
+The deploy script creates the cache directory on the VPS before starting PM2.

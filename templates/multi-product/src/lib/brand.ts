@@ -3,11 +3,13 @@ import { normalizeMediaUrl } from "./format";
 
 export type BrandLogo = {
   src: string;
+  lightSrc: string;
   alt: string;
   isDefault: boolean;
 };
 
-const DEFAULT_LOGO_SRC = "/logo.svg";
+const DEFAULT_LOGO_SRC = "/logo.png";
+const DEFAULT_LOGO_LIGHT_SRC = "/logo-light.png";
 
 export function getBrandLogo(site: SiteConfig): BrandLogo {
   const configuredLogo = firstString(
@@ -19,6 +21,9 @@ export function getBrandLogo(site: SiteConfig): BrandLogo {
 
   return {
     src: configuredLogo ? normalizeMediaUrl(configuredLogo) : DEFAULT_LOGO_SRC,
+    lightSrc: configuredLogo
+      ? normalizeMediaUrl(configuredLogo)
+      : DEFAULT_LOGO_LIGHT_SRC,
     alt: firstString(site.logoAlt, site.name) ?? "Store logo",
     isDefault: !configuredLogo,
   };

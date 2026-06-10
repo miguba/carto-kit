@@ -1,10 +1,12 @@
 ---
 import CheckoutForm from '@/components/CheckoutForm';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { getProduct, getCommerceConfigFromServer } from '@/lib/commerce';
+import { getCommerceConfigFromServer } from '@/lib/commerce';
 import type { SiteConfig } from '@/lib/commerce';
 import { getBrandLogo } from '@/lib/brand';
 import { getCommerceConfig, type CommerceMediaConfig } from '@/lib/config';
+import { getPageCacheBinding } from '@/lib/page-cache-binding';
+import { getCachedProduct } from '@/lib/product-cache';
 
 export const prerender = false;
 
@@ -12,6 +14,7 @@ const slug = Astro.url.searchParams.get('slug') || '';
 const sku = Astro.url.searchParams.get('sku') || '';
 const quantity = Math.max(1, Number(Astro.url.searchParams.get('quantity') || '1'));
 const { mapboxAccessToken } = getCommerceConfig();
+const pageCacheBinding = await getPageCacheBinding();
 
 let site: SiteConfig | null = null;
 let paypalClientId = '';
@@ -61,7 +64,10 @@ if (!slug || !sku || !Number.isInteger(quantity)) {
   loadError = 'Missing or invalid checkout selection.';
 } else {
   try {
-    product = await getProduct(slug);
+    product = await getCachedProduct(slug, {
+      refresh: Astro.url.searchParams.get('___refresh___') === '1',
+      kvCache: pageCacheBinding,
+    });
     variant = product.variants.find((item) => item.sku === sku) ?? null;
     if (!variant) {
       loadError = `SKU "${sku}" is not available for this product.`;

@@ -1,7 +1,13 @@
 ---
 import ProductPurchasePanel from '@/components/ProductPurchasePanel';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { getBlocksByKeys, getCommerceConfigFromServer } from '@/lib/commerce';
+import {
+  getCachedBlocksByKeys,
+  getCachedCommerceConfigFromServer,
+  type CommerceBlock,
+} from '@/lib/commerce';
+import { cachePage } from '@/lib/cache-page';
+import { getPageCacheBinding } from '@/lib/page-cache-binding';
 import {
   IMAGE_PRESETS,
   imagePlaceholderStyle,
@@ -20,12 +26,21 @@ import type { Product } from '@/lib/types';
 export const prerender = false;
 
 const initialProductKey = Astro.url.searchParams.get('product') ?? '';
+const refreshCache = Astro.url.searchParams.get('___refresh___') === '1';
 let purchaseProducts: Awaited<ReturnType<typeof getPurchaseProducts>> | null =
   null;
 let product: Product | null = null;
 let mediaBaseUrl = '';
 let loadError = '';
 const homeContentBlockKey = 'home-content';
+let homeContentBlock: CommerceBlock | undefined;
+const pageCacheBinding = await getPageCacheBinding();
+
+type HomeCacheData = {
+  mediaBaseUrl: string;
+  purchaseProducts: Awaited<ReturnType<typeof getPurchaseProducts>>;
+  homeContentBlock?: CommerceBlock;
+};
 
 type FaqItem = {
   question: string;
@@ -41,9 +56,37 @@ type ReviewItem = {
 };
 
 try {
-  const commerceConfig = await getCommerceConfigFromServer();
-  mediaBaseUrl = commerceConfig.media?.cdnBaseUrl ?? '';
-  purchaseProducts = await getPurchaseProducts();
+  const { data } = await cachePage<HomeCacheData>('page:index', {
+    async fun() {
+      const [commerceConfig, purchaseProducts, homeContentBlocks] =
+        await Promise.all([
+          getCachedCommerceConfigFromServer({
+            refresh: refreshCache,
+            kvCache: pageCacheBinding,
+          }),
+          getPurchaseProducts({
+            refresh: refreshCache,
+            kvCache: pageCacheBinding,
+          }),
+          getCachedBlocksByKeys([homeContentBlockKey], {
+            refresh: refreshCache,
+            kvCache: pageCacheBinding,
+          }),
+        ]);
+
+      return {
+        mediaBaseUrl: commerceConfig.media?.cdnBaseUrl ?? '',
+        purchaseProducts,
+        homeContentBlock: homeContentBlocks[homeContentBlockKey],
+      };
+    },
+    refresh: refreshCache,
+    kvCache: pageCacheBinding,
+  });
+
+  mediaBaseUrl = data.mediaBaseUrl;
+  purchaseProducts = data.purchaseProducts;
+  homeContentBlock = data.homeContentBlock;
   const selectedItem =
     purchaseProducts.items.find((item) => item.key === initialProductKey) ??
     purchaseProducts.items.find(
@@ -373,9 +416,6 @@ let seoOgType = 'website';
 let seoNoindex = false;
 
 try {
-  const homeContentBlock = (await getBlocksByKeys([homeContentBlockKey]))[
-    homeContentBlockKey
-  ];
   if (homeContentBlock) {
     hasCustomHomeContent = true;
     const homeContent = {
@@ -384,7 +424,8 @@ try {
     };
 
     const seo = recordValue(homeContent.seo);
-    seoTitle = stringValue(seo.title) || stringValue(homeContent.seoTitle) || seoTitle;
+    seoTitle =
+      stringValue(seo.title) || stringValue(homeContent.seoTitle) || seoTitle;
     seoDescription =
       stringValue(seo.description) ||
       stringValue(homeContent.seoDescription) ||
@@ -395,13 +436,18 @@ try {
       pathValue(homeContent.seoCanonicalPath) ||
       seoCanonicalPath;
     const seoImage = stringValue(seo.ogImage) || stringValue(seo.image);
-    seoOgImage = seoImage ? normalizeImageUrl(seoImage, mediaBaseUrl) : seoOgImage;
+    seoOgImage = seoImage
+      ? normalizeImageUrl(seoImage, mediaBaseUrl)
+      : seoOgImage;
     seoOgType = stringValue(seo.ogType) || seoOgType;
     seoNoindex = booleanValue(seo.noindex) ?? seoNoindex;
 
     const hero = recordValue(homeContent.hero);
-    const heroImage = stringValue(hero.image) || stringValue(homeContent.heroImage);
-    heroBannerImage = heroImage ? normalizeImageUrl(heroImage, mediaBaseUrl) : '';
+    const heroImage =
+      stringValue(hero.image) || stringValue(homeContent.heroImage);
+    heroBannerImage = heroImage
+      ? normalizeImageUrl(heroImage, mediaBaseUrl)
+      : '';
     heroBannerAlt = stringValue(hero.alt) || heroBannerAlt;
 
     const offer = recordValue(homeContent.offer);
@@ -409,7 +455,8 @@ try {
       stringValue(offer.headline) || stringValue(homeContent.offerHeadline);
 
     const descriptionSection = recordValue(homeContent.description);
-    descriptionTitle = stringValue(descriptionSection.title) || descriptionTitle;
+    descriptionTitle =
+      stringValue(descriptionSection.title) || descriptionTitle;
     descriptionMarkdown =
       stripFrontmatter(homeContentBlock.content) || descriptionMarkdown;
 
@@ -458,9 +505,10 @@ if (product) {
       lowPrice: (product.minPrice / 100).toFixed(2),
       highPrice: (product.maxPrice / 100).toFixed(2),
       offerCount: product.variants.length,
-      availability: product.totalStock > 0
-        ? 'https://schema.org/InStock'
-        : 'https://schema.org/OutOfStock',
+      availability:
+        product.totalStock > 0
+          ? 'https://schema.org/InStock'
+          : 'https://schema.org/OutOfStock',
     },
     ...(reviews.length > 0
       ? {
@@ -519,8 +567,17 @@ if (faqs.length > 0) {
             <div class="mx-auto max-w-6xl">
               <img
                 class="w-full"
-                src={optimizedImageUrl(heroBannerImage, IMAGE_PRESETS.hero, mediaBaseUrl)}
-                srcset={imageSrcSet(heroBannerImage, [640, 960, 1200], { quality: IMAGE_PRESETS.hero.quality }, mediaBaseUrl)}
+                src={optimizedImageUrl(
+                  heroBannerImage,
+                  IMAGE_PRESETS.hero,
+                  mediaBaseUrl,
+                )}
+                srcset={imageSrcSet(
+                  heroBannerImage,
+                  [640, 960, 1200],
+                  { quality: IMAGE_PRESETS.hero.quality },
+                  mediaBaseUrl,
+                )}
                 sizes="min(100vw, 1152px)"
                 alt={heroBannerAlt}
                 width="1200"
@@ -550,8 +607,17 @@ if (faqs.length > 0) {
             <div class="mx-auto max-w-6xl">
               <img
                 class="mx-auto w-[min(820px,100%)]"
-                src={optimizedImageUrl(safeCheckoutImage, IMAGE_PRESETS.detail, mediaBaseUrl)}
-                srcset={imageSrcSet(safeCheckoutImage, [480, 720, 960], { quality: IMAGE_PRESETS.detail.quality }, mediaBaseUrl)}
+                src={optimizedImageUrl(
+                  safeCheckoutImage,
+                  IMAGE_PRESETS.detail,
+                  mediaBaseUrl,
+                )}
+                srcset={imageSrcSet(
+                  safeCheckoutImage,
+                  [480, 720, 960],
+                  { quality: IMAGE_PRESETS.detail.quality },
+                  mediaBaseUrl,
+                )}
                 sizes="min(100vw, 820px)"
                 alt="Guaranteed safe checkout"
                 loading="lazy"
@@ -583,8 +649,17 @@ if (faqs.length > 0) {
                 >
                   <img
                     class="h-auto w-full"
-                    src={optimizedImageUrl(image, IMAGE_PRESETS.detail, mediaBaseUrl)}
-                    srcset={imageSrcSet(image, [640, 960, 1200], { quality: IMAGE_PRESETS.detail.quality }, mediaBaseUrl)}
+                    src={optimizedImageUrl(
+                      image,
+                      IMAGE_PRESETS.detail,
+                      mediaBaseUrl,
+                    )}
+                    srcset={imageSrcSet(
+                      image,
+                      [640, 960, 1200],
+                      { quality: IMAGE_PRESETS.detail.quality },
+                      mediaBaseUrl,
+                    )}
                     sizes="min(100vw, 1152px)"
                     alt={`${product.title} detail ${index + 1}`}
                     width="960"

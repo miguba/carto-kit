@@ -1,4 +1,4 @@
-import { getBlocksByKeys, type CommerceBlock } from './commerce';
+import { getCachedBlocksByKeys, type CommerceBlock } from './commerce';
 
 export type FooterLink = {
   label: string;
@@ -17,7 +17,10 @@ const FOOTER_BLOCK_KEY = 'footer-content';
 
 const DEFAULT_FOOTER_LINKS: FooterLink[] = [
   { label: 'Home', href: '/' },
-  { label: 'Cancellation & Refund Policy', href: '/cancellation-refund-policy' },
+  {
+    label: 'Cancellation & Refund Policy',
+    href: '/cancellation-refund-policy',
+  },
   { label: 'Privacy Policy', href: '/privacy-policy' },
   { label: 'Terms & Conditions', href: '/terms-conditions' },
   { label: 'Contact us', href: '/contact-us' },
@@ -31,9 +34,17 @@ const DEFAULT_SITE_CHROME: SiteChrome = {
   footerCopyright: '© 2025 ICE DOT 98 LIMITED. All Rights Reserved.',
 };
 
-export async function getSiteChrome(): Promise<SiteChrome> {
+type SiteChromeOptions = {
+  refresh?: boolean;
+  ttl?: number;
+  kvCache?: KVNamespace;
+};
+
+export async function getSiteChrome(
+  options: SiteChromeOptions = {},
+): Promise<SiteChrome> {
   try {
-    const blocks = await getBlocksByKeys([FOOTER_BLOCK_KEY]);
+    const blocks = await getCachedBlocksByKeys([FOOTER_BLOCK_KEY], options);
     return normalizeSiteChrome(blocks[FOOTER_BLOCK_KEY]);
   } catch {
     return DEFAULT_SITE_CHROME;

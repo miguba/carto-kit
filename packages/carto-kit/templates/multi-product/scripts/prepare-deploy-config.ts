@@ -31,6 +31,7 @@ if (deploymentTarget !== "cloudflare-workers") {
 }
 
 const appName = normalizeWorkerName(requiredEnv("APP_NAME"));
+const runtimeVars = pickEnvVars(["PAGE_CACHE_PREFIX"]);
 
 const cfg = {
   $schema: "./node_modules/wrangler/config-schema.json",
@@ -45,7 +46,18 @@ const cfg = {
   observability: {
     enabled: true,
   },
+  ...(Object.keys(runtimeVars).length > 0 ? { vars: runtimeVars } : {}),
 };
+
+const kvNamespaceId = process.env.CLOUDFLARE_KV_NAMESPACE_ID;
+if (kvNamespaceId) {
+  cfg.kv_namespaces = [
+    {
+      binding: "KV_STORE",
+      id: kvNamespaceId,
+    },
+  ];
+}
 
 fs.writeFileSync("wrangler.jsonc", `${JSON.stringify(cfg, null, 2)}\n`);
 console.log(`[gen] wrote wrangler.jsonc for ${nodeEnv}`);
@@ -132,6 +144,15 @@ function requiredEnv(key: string): string {
   }
 
   return value;
+}
+
+function pickEnvVars(keys: string[]): Record<string, string> {
+  return Object.fromEntries(
+    keys.flatMap((key) => {
+      const value = process.env[key];
+      return value ? [[key, value]] : [];
+    }),
+  );
 }
 
 function normalizeWorkerName(value: string): string {

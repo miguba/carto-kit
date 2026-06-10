@@ -9,6 +9,9 @@ export interface CliOptions {
   token?: string;
   cloudflareAccountId?: string;
   cloudflareApiToken?: string;
+  cloudflareKvNamespaceId?: string;
+  pageCacheDir?: string;
+  pageCachePrefix?: string;
   commerceApiBaseUrl?: string;
   template?: StorefrontTemplate;
   deploy?: DeploymentTarget;
@@ -22,6 +25,7 @@ export interface StorefrontAnswers {
   commerceApiToken: string;
   commerceApiBaseUrl: string;
   siteDomain: string;
+  pageCachePrefix: string;
   deploymentTarget: DeploymentTarget;
   cloudflare: CloudflareAnswers;
   vps: VpsAnswers;
@@ -30,6 +34,7 @@ export interface StorefrontAnswers {
 export interface CloudflareAnswers {
   accountId: string;
   apiToken: string;
+  kvNamespaceId: string;
 }
 
 export interface VpsAnswers {
@@ -41,6 +46,7 @@ export interface VpsAnswers {
   pm2AppName: string;
   appPort: string;
   caddyDomain: string;
+  pageCacheDir: string;
 }
 
 export type TargetDirectoryAction = "reset" | "overwrite";
@@ -78,13 +84,15 @@ export async function collectAnswers(projectNameArg: string | undefined, options
     default: defaultDeployTarget,
     choices: deploymentChoices
   }));
-
   const cloudflare = deploymentTarget === "cloudflare-workers" && !options.yes
     ? await collectCloudflareAnswers(options)
     : defaultCloudflareAnswers(options);
+  const pageCachePrefix = deploymentTarget === "cloudflare-workers" && !options.yes
+    ? await collectPageCachePrefix(siteDomain.trim(), options)
+    : defaultPageCachePrefix(siteDomain.trim(), options);
   const vps = deploymentTarget === "vps" && !options.yes
-    ? await collectVpsAnswers(siteDomain.trim())
-    : defaultVpsAnswers(siteDomain.trim());
+    ? await collectVpsAnswers(siteDomain.trim(), options)
+    : defaultVpsAnswers(siteDomain.trim(), options);
 
   return {
     projectName: cleanProjectName,
@@ -93,6 +101,7 @@ export async function collectAnswers(projectNameArg: string | undefined, options
     commerceApiToken,
     commerceApiBaseUrl,
     siteDomain: siteDomain.trim(),
+    pageCachePrefix,
     deploymentTarget,
     cloudflare,
     vps
@@ -104,6 +113,19 @@ function resolveSiteDomain(projectName: string, options: CliOptions): string {
     return options.site.trim();
   }
   return inferDomainFromProjectName(projectName);
+}
+
+async function collectPageCachePrefix(siteDomain: string, options: CliOptions): Promise<string> {
+  const prefix = options.pageCachePrefix ?? await input({
+    message: "Page cache prefix",
+    default: siteDomain,
+    validate: validateRequiredSingleLine("Page cache prefix")
+  });
+  return prefix.trim();
+}
+
+function defaultPageCachePrefix(siteDomain: string, options: CliOptions): string {
+  return options.pageCachePrefix?.trim() || siteDomain;
 }
 
 async function collectCommerceApiToken(
@@ -140,11 +162,21 @@ async function collectCloudflareAnswers(options: CliOptions): Promise<Cloudflare
     mask: "*",
     validate: validateRequiredSingleLine("Cloudflare API token")
   });
+  const kvNamespaceId = options.cloudflareKvNamespaceId ?? await input({
+    message: "Page cache KV namespace ID (blank = memory cache)",
+    default: "",
+    validate: validateOptionalSingleLine("Cloudflare KV namespace ID")
+  });
 
   return {
     accountId: accountId.trim(),
-    apiToken: apiToken.trim()
+    apiToken: apiToken.trim(),
+    kvNamespaceId: kvNamespaceId.trim()
   };
+}
+
+function validateOptionalSingleLine(label: string): (value: string) => true | string {
+  return (value) => /[\r\n]/.test(value) ? `${label} must be a single line.` : true;
 }
 
 function validateRequiredSingleLine(label: string): (value: string) => true | string {
@@ -178,7 +210,7 @@ async function collectTargetDirectoryAction(
   });
 }
 
-async function collectVpsAnswers(siteDomain: string): Promise<VpsAnswers> {
+async function collectVpsAnswers(siteDomain: string, options: CliOptions): Promise<VpsAnswers> {
   const host = await input({
     message: "VPS host",
     default: "",
@@ -215,6 +247,11 @@ async function collectVpsAnswers(siteDomain: string): Promise<VpsAnswers> {
     default: siteDomain,
     validate: validateCaddyDomains
   });
+  const pageCacheDir = options.pageCacheDir ?? await input({
+    message: "Page cache directory",
+    default: "./.cache",
+    validate: validateOptionalSingleLine("VPS page cache directory")
+  });
 
   return {
     host: host.trim(),
@@ -224,11 +261,12 @@ async function collectVpsAnswers(siteDomain: string): Promise<VpsAnswers> {
     deployDir: deployDir.trim(),
     pm2AppName: pm2AppName.trim(),
     appPort: appPort.trim(),
-    caddyDomain: caddyDomain.trim()
+    caddyDomain: caddyDomain.trim(),
+    pageCacheDir: pageCacheDir.trim()
   };
 }
 
-function defaultVpsAnswers(siteDomain: string): VpsAnswers {
+function defaultVpsAnswers(siteDomain: string, options: CliOptions): VpsAnswers {
   return {
     host: siteDomain,
     port: "22",
@@ -237,7 +275,8 @@ function defaultVpsAnswers(siteDomain: string): VpsAnswers {
     deployDir: "/var/www/carto",
     pm2AppName: "carto",
     appPort: "4321",
-    caddyDomain: siteDomain
+    caddyDomain: siteDomain,
+    pageCacheDir: options.pageCacheDir?.trim() ?? "./.cache"
   };
 }
 
@@ -254,7 +293,8 @@ function validatePort(label: string): (value: string) => true | string {
 function defaultCloudflareAnswers(options: CliOptions): CloudflareAnswers {
   return {
     accountId: options.cloudflareAccountId?.trim() ?? "",
-    apiToken: options.cloudflareApiToken?.trim() ?? ""
+    apiToken: options.cloudflareApiToken?.trim() ?? "",
+    kvNamespaceId: options.cloudflareKvNamespaceId?.trim() ?? ""
   };
 }
 

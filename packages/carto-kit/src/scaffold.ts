@@ -205,6 +205,7 @@ function buildEnvFile(answers: StorefrontAnswers): string {
   const lines = [
     `APP_NAME=${toAppName(answers.projectName)}`,
     "APP_ENV=development",
+    `PAGE_CACHE_PREFIX=${formatEnvValue(answers.pageCachePrefix)}`,
     "",
     "PUBLIC_FEATURED_PRODUCT_SLUG=microsoft-office-365-5-devices-license",
     "PUBLIC_MAPBOX_ACCESS_TOKEN=",
@@ -216,6 +217,8 @@ function buildEnvFile(answers: StorefrontAnswers): string {
     lines.unshift(
       `CLOUDFLARE_ACCOUNT_ID=${formatEnvValue(answers.cloudflare.accountId)}`,
       `CLOUDFLARE_API_TOKEN=${formatEnvValue(answers.cloudflare.apiToken)}`,
+      "# Optional persistent page-data cache. Create a Workers KV namespace and paste its id here.",
+      `CLOUDFLARE_KV_NAMESPACE_ID=${formatEnvValue(answers.cloudflare.kvNamespaceId)}`,
       ""
     );
   }
@@ -230,7 +233,10 @@ function buildEnvFile(answers: StorefrontAnswers): string {
       `VPS_DEPLOY_DIR=${answers.vps.deployDir}`,
       `VPS_PM2_APP_NAME=${answers.vps.pm2AppName}`,
       `VPS_APP_PORT=${answers.vps.appPort}`,
-      `VPS_CADDY_DOMAIN=${answers.vps.caddyDomain}`
+      `VPS_CADDY_DOMAIN=${answers.vps.caddyDomain}`,
+      "",
+      "# Page-data cache directory for VPS deploys.",
+      `PAGE_CACHE_DIR=${formatEnvValue(answers.vps.pageCacheDir)}`
     );
   }
   return `${lines.join("\n")}\n`;
@@ -244,6 +250,7 @@ function buildEnvExampleFile(answers: StorefrontAnswers): string {
   const lines = [
     `APP_NAME=${toAppName(answers.projectName)}`,
     "APP_ENV=development",
+    `PAGE_CACHE_PREFIX=${answers.pageCachePrefix}`,
     "",
     "COMMERCE_API_TOKEN=replace-with-ems-server-app-token",
     "PUBLIC_FEATURED_PRODUCT_SLUG=microsoft-office-365-5-devices-license",
@@ -255,7 +262,11 @@ function buildEnvExampleFile(answers: StorefrontAnswers): string {
       "",
       "# Cloudflare deploy",
       "CLOUDFLARE_ACCOUNT_ID=",
-      "CLOUDFLARE_API_TOKEN="
+      "CLOUDFLARE_API_TOKEN=",
+      "",
+      "# Cache",
+      "# Create a Workers KV namespace and paste its id here for persistent page-data cache.",
+      "CLOUDFLARE_KV_NAMESPACE_ID="
     );
   }
 
@@ -271,7 +282,11 @@ function buildEnvExampleFile(answers: StorefrontAnswers): string {
       "VPS_PM2_APP_NAME=carto",
       "VPS_APP_PORT=4321",
       "# Comma-separated domains are supported, for example: example.com, www.example.com",
-      `VPS_CADDY_DOMAIN=${answers.vps.caddyDomain}`
+      `VPS_CADDY_DOMAIN=${answers.vps.caddyDomain}`,
+      "",
+      "# Cache",
+      "# Page-data cache directory for VPS deploys.",
+      "PAGE_CACHE_DIR=./.cache"
     );
   }
 
@@ -283,6 +298,7 @@ function buildMultiProductEnvExampleFile(answers: StorefrontAnswers): string {
     `APP_NAME=${toAppName(answers.projectName)}`,
     "APP_ENV=development",
     `DEPLOYMENT_TARGET=${answers.deploymentTarget}`,
+    `PAGE_CACHE_PREFIX=${answers.pageCachePrefix}`,
     "",
     "COMMERCE_API_TOKEN=replace-with-ems-server-app-token",
     "",
@@ -294,7 +310,11 @@ function buildMultiProductEnvExampleFile(answers: StorefrontAnswers): string {
       "",
       "# Cloudflare deploy",
       "CLOUDFLARE_ACCOUNT_ID=",
-      "CLOUDFLARE_API_TOKEN="
+      "CLOUDFLARE_API_TOKEN=",
+      "",
+      "# Cache",
+      "# Create a Workers KV namespace and paste its id here for persistent page-data cache.",
+      "CLOUDFLARE_KV_NAMESPACE_ID="
     );
   }
 
@@ -310,7 +330,11 @@ function buildMultiProductEnvExampleFile(answers: StorefrontAnswers): string {
       "VPS_PM2_APP_NAME=carto",
       "VPS_APP_PORT=4321",
       "# Comma-separated domains are supported, for example: example.com, www.example.com",
-      `VPS_CADDY_DOMAIN=${answers.vps.caddyDomain}`
+      `VPS_CADDY_DOMAIN=${answers.vps.caddyDomain}`,
+      "",
+      "# Cache",
+      "# Page-data cache directory for VPS deploys.",
+      "PAGE_CACHE_DIR=./.cache"
     );
   }
 
@@ -322,6 +346,7 @@ function buildMultiProductEnvFile(answers: StorefrontAnswers): string {
     `APP_NAME=${toAppName(answers.projectName)}`,
     "APP_ENV=development",
     `DEPLOYMENT_TARGET=${answers.deploymentTarget}`,
+    `PAGE_CACHE_PREFIX=${formatEnvValue(answers.pageCachePrefix)}`,
     "",
     `COMMERCE_API_TOKEN=${formatEnvValue(answers.commerceApiToken)}`,
     "",
@@ -332,6 +357,8 @@ function buildMultiProductEnvFile(answers: StorefrontAnswers): string {
     lines.unshift(
       `CLOUDFLARE_ACCOUNT_ID=${formatEnvValue(answers.cloudflare.accountId)}`,
       `CLOUDFLARE_API_TOKEN=${formatEnvValue(answers.cloudflare.apiToken)}`,
+      "# Optional persistent page-data cache. Create a Workers KV namespace and paste its id here.",
+      `CLOUDFLARE_KV_NAMESPACE_ID=${formatEnvValue(answers.cloudflare.kvNamespaceId)}`,
       ""
     );
   }
@@ -347,7 +374,10 @@ function buildMultiProductEnvFile(answers: StorefrontAnswers): string {
       `VPS_DEPLOY_DIR=${answers.vps.deployDir}`,
       `VPS_PM2_APP_NAME=${answers.vps.pm2AppName}`,
       `VPS_APP_PORT=${answers.vps.appPort}`,
-      `VPS_CADDY_DOMAIN=${answers.vps.caddyDomain}`
+      `VPS_CADDY_DOMAIN=${answers.vps.caddyDomain}`,
+      "",
+      "# Page-data cache directory for VPS deploys.",
+      `PAGE_CACHE_DIR=${formatEnvValue(answers.vps.pageCacheDir)}`
     );
   }
 

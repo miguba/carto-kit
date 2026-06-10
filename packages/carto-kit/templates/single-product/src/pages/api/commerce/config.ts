@@ -1,14 +1,19 @@
 import type { APIRoute } from 'astro';
-import { getCommerceConfigFromServer } from '@/lib/commerce';
+import { getCachedCommerceConfigFromServer } from '@/lib/commerce';
 
 export const prerender = false;
 
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({ url }) => {
   try {
-    const config = await getCommerceConfigFromServer();
+    const config = await getCachedCommerceConfigFromServer({
+      refresh: url.searchParams.get('___refresh___') === '1',
+    });
     return json({ success: true, data: config });
   } catch (error) {
-    return json({ success: false, data: getErrorMessage(error) }, getStatus(error));
+    return json(
+      { success: false, data: getErrorMessage(error) },
+      getStatus(error),
+    );
   }
 };
 
@@ -22,11 +27,18 @@ function json(body: unknown, status = 200) {
 }
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Unexpected commerce config error';
+  return error instanceof Error
+    ? error.message
+    : 'Unexpected commerce config error';
 }
 
 function getStatus(error: unknown) {
-  if (error && typeof error === 'object' && 'status' in error && typeof error.status === 'number') {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'status' in error &&
+    typeof error.status === 'number'
+  ) {
     return error.status;
   }
 
