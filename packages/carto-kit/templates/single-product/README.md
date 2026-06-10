@@ -101,6 +101,11 @@ purchase-products:
 If the decoration is missing or invalid, the page shows a clear configuration
 error in development instead of falling back to an implicit product.
 
+## Optional EMS Blocks
+
+Block-based home page and footer content is documented in
+[`decoration.md`](./decoration.md).
+
 ## Product Data Responsibilities
 
 Decoration is only page composition data. Product content stays on EMS

@@ -1,71 +1,56 @@
 ---
 import PolicyPage from '@/components/PolicyPage.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
+import defaultPolicyMarkdown from '@/content/policies/privacy-policy.md?raw';
+import { getCommerceConfigFromServer } from '@/lib/commerce';
+import { loadPolicyBlock } from '@/lib/policy-block';
 
-const contactMethods = [
-  { label: 'Privacy requests', value: 'privacy@office.dibsale.com', href: 'mailto:privacy@office.dibsale.com' },
-  { label: 'General support', value: 'support@office.dibsale.com', href: 'mailto:support@office.dibsale.com' },
-];
+const POLICY_BLOCK_KEY = 'privacy-policy';
 
-const sections = [
-  {
-    title: 'Information We Collect',
-    body: 'We collect information needed to operate the storefront, process orders, provide support, and improve the customer experience.',
-    items: [
-      'Contact details such as name, email address, phone number, and billing or delivery information.',
-      'Order details including purchased products, selected variants, quantity, order number, payment status, and fulfillment status.',
-      'Technical information such as browser type, device information, IP address, pages visited, and referral source.',
-      'Support messages and attachments you choose to send when requesting help.',
-    ],
+const { site } = await getCommerceConfigFromServer();
+
+const policy = await loadPolicyBlock({
+  key: POLICY_BLOCK_KEY,
+  defaultMarkdown: defaultPolicyMarkdown,
+  fallbackTitle: 'Privacy Policy',
+  fallbackIntro:
+    'This policy explains what information we collect, why we collect it, and how you can contact us about your privacy choices.',
+  fallbackDescription: `Learn how ${site.name} collects, uses, protects, and shares customer information.`,
+  siteName: site.name,
+  variables: {
+    siteName: site.name,
+    supportEmail: site.supportEmail,
   },
-  {
-    title: 'How We Use Information',
-    items: [
-      'To create, confirm, fulfill, and support your orders.',
-      'To send order updates, payment notices, delivery information, and customer service responses.',
-      'To prevent fraud, protect the security of the store, and troubleshoot technical issues.',
-      'To understand how visitors use the site and improve page performance, product presentation, and checkout flow.',
-    ],
-  },
-  {
-    title: 'Payments',
-    body: 'Payments may be handled by third-party payment providers such as PayPal. We do not store full card numbers or complete payment account credentials on our site.',
-  },
-  {
-    title: 'Cookies and Analytics',
-    body: 'We may use cookies or similar technologies to keep the site functional, remember checkout state, measure performance, and understand aggregate traffic patterns. You can control cookies through your browser settings, though some checkout features may depend on them.',
-  },
-  {
-    title: 'Sharing Information',
-    items: [
-      'We share information with service providers only as needed for payment processing, order fulfillment, hosting, analytics, fraud prevention, and customer support.',
-      'We may disclose information if required by law, payment network rules, legal process, or to protect our rights and customers.',
-      'We do not sell personal information.',
-    ],
-  },
-  {
-    title: 'Your Choices',
-    body: 'You may ask us to access, correct, delete, or restrict certain personal information where applicable law allows. We may need to verify your identity before completing a request.',
-  },
-  {
-    title: 'Data Retention',
-    body: 'We keep order, payment, and support records for as long as needed to provide services, comply with legal obligations, resolve disputes, and maintain accurate business records.',
-  },
-];
+});
 ---
 
 <BaseLayout
-  title="Privacy Policy | 365 Deal"
-  description="Learn how 365 Deal collects, uses, protects, and shares customer information."
+  title={`${policy.seoTitle} | ${site.name}`}
+  description={policy.pageDescription}
+  canonicalPath="/privacy-policy"
+  jsonLd={[{
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: policy.title,
+    description: policy.pageDescription,
+    breadcrumb: {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: '/' },
+        { '@type': 'ListItem', position: 2, name: policy.title },
+      ],
+    },
+  }]}
 >
   <PolicyPage
-    eyebrow="Privacy"
-    title="Privacy Policy"
-    intro="This policy explains what information we collect, why we collect it, and how you can contact us about your privacy choices."
-    updated="May 20, 2026"
-    sections={sections}
-    asideTitle="Questions about your data?"
-    asideText="We can help with access, correction, deletion, or account-related privacy questions."
-    contactMethods={contactMethods}
+    eyebrow={policy.eyebrow}
+    title={policy.title}
+    intro={policy.intro}
+    updated={policy.updated}
+    contentHtml={policy.contentHtml}
+    contentHeadings={policy.contentHeadings}
+    asideTitle={policy.asideTitle}
+    asideText={policy.asideText}
+    contactMethods={policy.contactMethods}
   />
 </BaseLayout>

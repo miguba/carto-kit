@@ -6,6 +6,9 @@ const TEMPLATE_COMMERCE_API_PLACEHOLDER = [
   'URL__',
 ].join('_');
 
+const SITE_URL = '__SITE_URL__';
+const TEMPLATE_SITE_URL_PLACEHOLDER = ['__SITE', 'URL__'].join('_');
+
 export type CommerceMediaConfig = {
   cdnBaseUrl?: string | null;
 };
@@ -61,4 +64,23 @@ function normalizeOptionalToken(value: string | undefined) {
   }
 
   return value;
+}
+
+/** Returns the public site origin (e.g. https://example.com) without trailing slash. */
+export function getSiteUrl(): string {
+  const scaffolded = normalizeBaseUrl(SITE_URL);
+  if (scaffolded && scaffolded !== TEMPLATE_SITE_URL_PLACEHOLDER) {
+    return scaffolded;
+  }
+
+  const envUrl = normalizeBaseUrl(import.meta.env.PUBLIC_SITE_URL);
+  if (envUrl) {
+    return envUrl;
+  }
+
+  if (import.meta.env.DEV) {
+    return 'http://localhost:4321';
+  }
+
+  return '';
 }

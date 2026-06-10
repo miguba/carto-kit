@@ -1,17 +1,54 @@
 ---
 import '@/styles/global.css';
+import { getSiteChrome } from '@/lib/site-chrome';
+import { getSiteUrl } from '@/lib/config';
 
 type Props = {
   title: string;
   description?: string;
   checkoutOnly?: boolean;
+  /** Path for canonical URL (e.g. '/' or '/privacy-policy'). Defaults to current pathname without query params. */
+  canonicalPath?: string;
+  /** Full URL or path for og:image. Falls back to /ms365-logo.png. */
+  ogImage?: string;
+  /** Open Graph type. Defaults to 'website'. */
+  ogType?: string;
+  /** If true, adds noindex/nofollow robots meta. */
+  noindex?: boolean;
+  /** Extra JSON-LD structured data objects to inject into the page. */
+  jsonLd?: Record<string, unknown>[];
 };
 
 const {
   title,
   description = '365 Deal — Microsoft 365 digital subscriptions and secure checkout.',
   checkoutOnly = false,
+  canonicalPath,
+  ogImage,
+  ogType = 'website',
+  noindex = false,
+  jsonLd = [],
 } = Astro.props;
+const siteChrome = await getSiteChrome();
+const siteUrl = getSiteUrl();
+const resolvedCanonicalPath = canonicalPath ?? Astro.url.pathname;
+const canonicalUrl = `${siteUrl}${resolvedCanonicalPath}`;
+const resolvedOgImage = ogImage
+  ? (ogImage.startsWith('http') ? ogImage : `${siteUrl}${ogImage}`)
+  : `${siteUrl}/ms365-logo.png`;
+
+const organizationJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: '365 Deal',
+  url: siteUrl,
+  logo: `${siteUrl}/ms365-logo.png`,
+  contactPoint: {
+    '@type': 'ContactPoint',
+    email: 'support@office.dibsale.com',
+    contactType: 'customer service',
+  },
+};
 ---
 
 <!doctype html>
@@ -23,7 +60,30 @@ const {
     <meta name="generator" content={Astro.generator} />
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <meta name="theme-color" content="#2563eb" />
+    <link rel="canonical" href={canonicalUrl} />
+    {noindex ? <meta name="robots" content="noindex, nofollow" /> : null}
+
+    <!-- Open Graph -->
+    <meta property="og:type" content={ogType} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={resolvedOgImage} />
+    <meta property="og:site_name" content="365 Deal" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={resolvedOgImage} />
+
     <title>{title}</title>
+
+    <!-- Organization JSON-LD -->
+    <script is:inline type="application/ld+json" set:html={JSON.stringify(organizationJsonLd)} />
+    {jsonLd.map((data) => (
+      <script is:inline type="application/ld+json" set:html={JSON.stringify(data)} />
+    ))}
   </head>
   <body>
     <div class="min-h-screen">
@@ -76,50 +136,32 @@ const {
           >
             <img
               class="h-[14px] w-[14px] object-contain"
-              src="/favicon.ico"
+              src={siteChrome.footerIcon}
               alt=""
               aria-hidden="true"
             />
-            <span class="font-rm text-[#555]">Powered by</span>
-            <span class="text-[#111]">365 DEAL</span>
+            <span class="font-rm text-[#555]">
+              {siteChrome.footerPoweredByLabel}
+            </span>
+            <span class="text-[#111]">{siteChrome.footerBrandName}</span>
           </div>
           <nav
             class="flex flex-wrap justify-center gap-x-[18px] gap-y-2 text-sm leading-[1.2]"
             aria-label="Footer links"
           >
-            <a
-              class="font-normal text-[#7a7a7a] no-underline hover:text-[#0b67a3] hover:underline"
-              href="/"
-            >
-              Home
-            </a>
-            <a
-              class="font-normal text-[#7a7a7a] no-underline hover:text-[#0b67a3] hover:underline"
-              href="/cancellation-refund-policy"
-            >
-              Cancellation &amp; Refund Policy
-            </a>
-            <a
-              class="font-normal text-[#7a7a7a] no-underline hover:text-[#0b67a3] hover:underline"
-              href="/privacy-policy"
-            >
-              Privacy Policy
-            </a>
-            <a
-              class="font-normal text-[#7a7a7a] no-underline hover:text-[#0b67a3] hover:underline"
-              href="/terms-conditions"
-            >
-              Terms &amp; Conditions
-            </a>
-            <a
-              class="font-normal text-[#7a7a7a] no-underline hover:text-[#0b67a3] hover:underline"
-              href="/contact-us"
-            >
-              Contact us
-            </a>
+            {
+              siteChrome.footerLinks.map((link) => (
+                <a
+                  class="font-normal text-[#7a7a7a] no-underline hover:text-[#0b67a3] hover:underline"
+                  href={link.href}
+                >
+                  {link.label}
+                </a>
+              ))
+            }
           </nav>
           <p class="m-0 text-xs leading-[1.2] text-[#7a7a7a]">
-            &copy; 2025 ICE DOT 98 LIMITED. All Rights Reserved.
+            {siteChrome.footerCopyright}
           </p>
         </div>
       </footer>

@@ -1,9 +1,12 @@
 import { ArrowRight, BadgeCheck, Minus, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import {
+  IMAGE_PRESETS,
   formatMoney,
   formatVariantName,
+  imageSrcSet,
   normalizeImageUrl,
+  optimizedImageUrl,
   productImages,
   productVideo,
 } from '@/lib/format';
@@ -21,6 +24,7 @@ type Props = {
   initialKey?: string;
   items: PurchaseProductItem[];
   mediaBaseUrl?: string;
+  offerHeadline?: string;
 };
 
 const panelWidth = 'mx-auto max-w-6xl';
@@ -33,6 +37,7 @@ export default function ProductPurchasePanel({
   initialKey = '',
   items,
   mediaBaseUrl,
+  offerHeadline = '',
 }: Props) {
   const initialActiveKey = getInitialActiveKey(items, defaultKey, initialKey);
   const [activeKey, setActiveKey] = useState(initialActiveKey);
@@ -191,6 +196,16 @@ export default function ProductPurchasePanel({
     return `${stock} in stock`;
   }
 
+  function placeholderStyle(src: string | undefined) {
+    if (!src) {
+      return undefined;
+    }
+
+    return {
+      '--image-placeholder': `url("${optimizedImageUrl(src, IMAGE_PRESETS.tiny, mediaBaseUrl)}")`,
+    } as React.CSSProperties;
+  }
+
   function buyNow() {
     if (!selectedVariant) {
       setError('Please choose a product option before checkout.');
@@ -232,9 +247,9 @@ export default function ProductPurchasePanel({
               : `${panelWidth} grid grid-cols-[minmax(0,0.95fr)_minmax(340px,1.05fr)] items-start gap-x-6 gap-y-4 max-[760px]:grid-cols-1`
           }
         >
-          {decoration?.txts?.[0] ? (
+          {offerHeadline || decoration?.txts?.[0] ? (
             <p className="col-span-full mb-3 mt-5 justify-self-center font-serif text-center text-[clamp(1.42rem,3vw,1.95rem)] font-black leading-tight text-[#232323] max-[760px]:mb-3 max-[760px]:mt-5 max-[760px]:text-[1.15rem]">
-              {decoration.txts[0]}
+              {offerHeadline || decoration?.txts?.[0]}
             </p>
           ) : null}
 
@@ -282,26 +297,50 @@ export default function ProductPurchasePanel({
           >
             {hasMedia ? (
               <div className="grid gap-2.5" aria-label="Product media gallery">
-                <div className="grid aspect-square min-h-0 w-full place-items-center overflow-hidden bg-white">
+                <div
+                  className="image-placeholder-frame grid aspect-square min-h-0 w-full place-items-center overflow-hidden bg-white"
+                  style={placeholderStyle(
+                    activeMedia?.type === 'video'
+                      ? activeMedia.poster
+                      : activeMedia?.src,
+                  )}
+                >
                   {activeMedia?.type === 'video' ? (
                     <video
-                      className="h-full w-full object-contain"
+                      className="relative z-[1] h-full w-full object-contain"
                       aria-label={`${product.title} product video`}
                       autoPlay
                       controls
                       loop
                       muted
                       playsInline
-                      poster={activeMedia.poster}
+                      poster={optimizedImageUrl(
+                        activeMedia.poster ?? '',
+                        IMAGE_PRESETS.hero,
+                        mediaBaseUrl,
+                      )}
                       preload="metadata"
                     >
                       <source src={activeMedia.src} />
                     </video>
                   ) : activeMedia ? (
                     <img
-                      className="h-full w-full object-contain"
-                      src={activeMedia.src}
+                      className="relative z-[1] h-full w-full object-contain"
+                      src={optimizedImageUrl(
+                        activeMedia.src,
+                        IMAGE_PRESETS.hero,
+                        mediaBaseUrl,
+                      )}
+                      srcSet={imageSrcSet(
+                        activeMedia.src,
+                        [640, 960, 1200],
+                        { quality: IMAGE_PRESETS.hero.quality },
+                        mediaBaseUrl,
+                      )}
+                      sizes="(min-width: 761px) 560px, calc(100vw - 40px)"
                       alt={product.title}
+                      decoding="async"
+                      fetchPriority="high"
                     />
                   ) : null}
                 </div>
@@ -315,22 +354,31 @@ export default function ProductPurchasePanel({
                         aria-label={`View product ${item.type} ${index + 1}`}
                         aria-pressed={activeImage === index}
                         className={[
-                          'relative h-[70px] w-[70px] flex-none overflow-hidden border border-line bg-white p-[3px] opacity-70 transition hover:opacity-95',
+                          'image-placeholder-frame relative h-[70px] w-[70px] flex-none overflow-hidden border border-line bg-white p-[3px] opacity-70 transition hover:opacity-95',
                           activeImage === index
                             ? 'border-[#0067b8] opacity-100 shadow-[0_0_0_2px_rgba(0,103,184,0.12)]'
                             : '',
                         ].join(' ')}
                         key={`${item.type}-${item.src}`}
                         onClick={() => setActiveImage(index)}
+                        style={placeholderStyle(
+                          item.type === 'video' ? item.poster : item.src,
+                        )}
                         type="button"
                       >
                         {item.type === 'video' ? (
                           <>
                             {item.poster ? (
                               <img
-                                className="h-full w-full object-cover"
-                                src={item.poster}
+                                className="relative z-[1] h-full w-full object-cover"
+                                src={optimizedImageUrl(
+                                  item.poster,
+                                  IMAGE_PRESETS.thumb,
+                                  mediaBaseUrl,
+                                )}
                                 alt=""
+                                loading={index < 5 ? 'eager' : 'lazy'}
+                                decoding="async"
                               />
                             ) : (
                               <span
@@ -349,9 +397,15 @@ export default function ProductPurchasePanel({
                           </>
                         ) : (
                           <img
-                            className="h-full w-full object-cover"
-                            src={item.src}
+                            className="relative z-[1] h-full w-full object-cover"
+                            src={optimizedImageUrl(
+                              item.src,
+                              IMAGE_PRESETS.thumb,
+                              mediaBaseUrl,
+                            )}
                             alt=""
+                            loading={index < 5 ? 'eager' : 'lazy'}
+                            decoding="async"
                           />
                         )}
                       </button>
@@ -467,7 +521,14 @@ export default function ProductPurchasePanel({
                     </span>
                     {variantImage ? (
                       <span className="hidden" aria-hidden="true">
-                        <img src={variantImage} alt="" />
+                        <img
+                          src={optimizedImageUrl(
+                            variantImage,
+                            IMAGE_PRESETS.thumb,
+                            mediaBaseUrl,
+                          )}
+                          alt=""
+                        />
                       </span>
                     ) : null}
                     <span className="grid min-w-0 gap-3">

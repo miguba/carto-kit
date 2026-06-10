@@ -1,58 +1,56 @@
 ---
 import PolicyPage from '@/components/PolicyPage.astro';
 import BaseLayout from '@/layouts/BaseLayout.astro';
+import defaultPolicyMarkdown from '@/content/policies/contact-us.md?raw';
+import { getCommerceConfigFromServer } from '@/lib/commerce';
+import { loadPolicyBlock } from '@/lib/policy-block';
 
-const contactMethods = [
-  { label: 'Email', value: 'support@office.dibsale.com', href: 'mailto:support@office.dibsale.com' },
-  { label: 'Response time', value: '1-2 business days' },
-  { label: 'Policy help', value: 'Refund policy', href: '/cancellation-refund-policy' },
-];
+const POLICY_BLOCK_KEY = 'contact-us';
 
-const sections = [
-  {
-    title: 'Customer Support',
-    body: 'For order questions, payment confirmation, delivery updates, refund reviews, or product support, email our team with your order number and the email address used at checkout.',
+const { site } = await getCommerceConfigFromServer();
+
+const policy = await loadPolicyBlock({
+  key: POLICY_BLOCK_KEY,
+  defaultMarkdown: defaultPolicyMarkdown,
+  fallbackTitle: 'Contact Us',
+  fallbackIntro:
+    'Need help with an order or a policy question? Send us the details and we will help you find the cleanest path forward.',
+  fallbackDescription: `Contact ${site.name} support for order help, payment questions, digital delivery updates, and refund requests.`,
+  siteName: site.name,
+  variables: {
+    siteName: site.name,
+    supportEmail: site.supportEmail,
   },
-  {
-    title: 'What to Include',
-    items: [
-      'Your order number, if you have one.',
-      'The email address used during checkout.',
-      'A short description of the issue or request.',
-      'Screenshots or payment references when they help us verify the problem.',
-    ],
-  },
-  {
-    title: 'Billing and Payment Help',
-    body: 'If your PayPal or card payment appears pending, duplicated, declined, or charged incorrectly, contact us before opening a dispute so we can check the order and payment logs.',
-  },
-  {
-    title: 'Refund Requests',
-    body: 'Refund requests are reviewed under the Cancellation & Refund Policy. We may ask for additional details before approving or declining a request.',
-  },
-  {
-    title: 'Business Information',
-    items: [
-      'Website: office.dibsale.com',
-      'Storefront: 365 Deal',
-      'Support email: support@office.dibsale.com',
-    ],
-  },
-];
+});
 ---
 
 <BaseLayout
-  title="Contact Us | 365 Deal"
-  description="Contact 365 Deal support for order help, payment questions, digital delivery updates, and refund requests."
+  title={`${policy.seoTitle} | ${site.name}`}
+  description={policy.pageDescription}
+  canonicalPath="/contact-us"
+  jsonLd={[{
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: policy.title,
+    description: policy.pageDescription,
+    breadcrumb: {
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: '/' },
+        { '@type': 'ListItem', position: 2, name: policy.title },
+      ],
+    },
+  }]}
 >
   <PolicyPage
-    eyebrow="Support"
-    title="Contact Us"
-    intro="Need help with an order or a policy question? Send us the details and we will help you find the cleanest path forward."
-    updated="May 20, 2026"
-    sections={sections}
-    asideTitle="Support mailbox"
-    asideText="For the fastest review, include your order number and the checkout email address."
-    contactMethods={contactMethods}
+    eyebrow={policy.eyebrow}
+    title={policy.title}
+    intro={policy.intro}
+    updated={policy.updated}
+    contentHtml={policy.contentHtml}
+    contentHeadings={policy.contentHeadings}
+    asideTitle={policy.asideTitle}
+    asideText={policy.asideText}
+    contactMethods={policy.contactMethods}
   />
 </BaseLayout>

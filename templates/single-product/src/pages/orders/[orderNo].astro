@@ -33,7 +33,7 @@ const progressDotComplete = `${progressDotBase} border-success bg-success shadow
 const progressDotPending = `${progressDotBase} border-muted/30 bg-white`;
 ---
 
-<BaseLayout title={order ? `Order ${order.orderNo}` : 'Order status'} description="Order status and payment result.">
+<BaseLayout title={order ? `Order ${order.orderNo}` : 'Order status'} description="Order status and payment result." noindex>
   {
     order ? (
       <section class="py-[92px]">

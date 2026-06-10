@@ -71,6 +71,25 @@ export function getDecoration(key: string) {
   );
 }
 
+export type CommerceBlock = {
+  key: string;
+  type: string;
+  meta: Record<string, unknown>;
+  content: string;
+  updatedAt: string;
+};
+
+export function getBlocksByKeys(keys: string[]) {
+  const encodedKeys = keys.map((key) => key.trim()).filter(Boolean);
+  if (!encodedKeys.length) {
+    return Promise.resolve({} as Record<string, CommerceBlock>);
+  }
+
+  return commerceRequest<Record<string, CommerceBlock>>(
+    `/api/commerce/blocks?keys=${encodeURIComponent(encodedKeys.join(','))}`,
+  );
+}
+
 export function getOrder(orderNo: string) {
   return commerceRequest<Order>(
     `/api/commerce/orders/${encodeURIComponent(orderNo)}`,

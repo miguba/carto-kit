@@ -82,7 +82,20 @@ type Decoration = {
   txts?: string[];
 };
 
+type ProductSeo = {
+  title?: string;
+  description?: string;
+  keywords?: string[];
+  image?: string;
+  canonicalPath?: string;
+  noindex?: boolean;
+};
+
 type ProductMeta = {
+  source?: string;
+  sourceProductId?: string;
+  sourceProductUrl?: string;
+  seo?: ProductSeo;
   video?: string;
   sellingPoints?: string[];
   attributes?: Record<string, string>;
@@ -520,28 +533,29 @@ More text can be interleaved between detail images.
 
 Frontmatter field rules:
 
-| Field                                 | Rule                                                                                |
-| ------------------------------------- | ----------------------------------------------------------------------------------- |
-| `title`                               | Required, non-empty string.                                                         |
-| `slug`                                | Optional. Generated from `title` when omitted.                                      |
-| `status`                              | Optional: `draft`, `active`, or `archived`.                                         |
-| `currency`                            | Optional supported `Currency`. Defaults to `USD`.                                   |
-| `mainImage` / `image`                 | Optional string. `image` is accepted as an alias.                                   |
-| `galleryImages` / `images`            | Optional string array. `images` is accepted as an alias.                            |
-| `video`                               | Optional string ending in `.mp4`, `.webm`, `.mov`, or `.m4v`.                       |
-| `tags` / `keywords`                   | Optional string array.                                                              |
-| `sellingPoints` / `bullets`           | Optional string array. Stored in `product.meta.sellingPoints`.                      |
-| `attributes` / `specs`                | Optional object with scalar values. Stored in `product.meta.attributes` as strings. |
-| `decoration`                          | Optional `Decoration`. Stored in `product.meta.decoration`.                         |
-| `meta.source`                         | Optional source platform or collector name. Stored in `product.meta.source`.        |
-| `meta.sourceProductId`                | Optional source product id. Stored in `product.meta.sourceProductId`.               |
-| `meta.sourceProductUrl`               | Optional original source URL. Stored in `product.meta.sourceProductUrl`.            |
-| `variants`                            | Optional array. Each item must have a non-empty `sku` if present.                   |
-| `variants[].optionValues` / `options` | Optional object with scalar values.                                                 |
-| `variants[].price`                    | Optional number in major currency units, for example `10.16`. Stored as cents.      |
-| `variants[].compareAtPrice`           | Optional number or `null`, also stored as cents.                                    |
-| `variants[].stock`                    | Optional integer.                                                                   |
-| `variants[].status`                   | Optional: `active`, `inactive`, or `archived`.                                      |
+| Field                                 | Rule                                                                                                                 |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `title`                               | Required, non-empty string.                                                                                          |
+| `slug`                                | Optional. Generated from `title` when omitted.                                                                       |
+| `status`                              | Optional: `draft`, `active`, or `archived`.                                                                          |
+| `currency`                            | Optional supported `Currency`. Defaults to `USD`.                                                                    |
+| `mainImage` / `image`                 | Optional string. `image` is accepted as an alias.                                                                    |
+| `galleryImages` / `images`            | Optional string array. `images` is accepted as an alias.                                                             |
+| `video`                               | Optional string ending in `.mp4`, `.webm`, `.mov`, or `.m4v`.                                                        |
+| `tags` / `keywords`                   | Optional string array.                                                                                               |
+| `sellingPoints` / `bullets`           | Optional string array. Stored in `product.meta.sellingPoints`.                                                       |
+| `attributes` / `specs`                | Optional object with scalar values. Stored in `product.meta.attributes` as strings.                                  |
+| `decoration`                          | Optional `Decoration`. Stored in `product.meta.decoration`.                                                          |
+| `seo`                                 | Optional `ProductSeo`. Stored in `product.meta.seo` and emitted as top-level frontmatter when content is serialized. |
+| `meta.source`                         | Optional source platform or collector name. Stored in `product.meta.source`.                                         |
+| `meta.sourceProductId`                | Optional source product id. Stored in `product.meta.sourceProductId`.                                                |
+| `meta.sourceProductUrl`               | Optional original source URL. Stored in `product.meta.sourceProductUrl`.                                             |
+| `variants`                            | Optional array. Each item must have a non-empty `sku` if present.                                                    |
+| `variants[].optionValues` / `options` | Optional object with scalar values.                                                                                  |
+| `variants[].price`                    | Optional number in major currency units, for example `10.16`. Stored as cents.                                       |
+| `variants[].compareAtPrice`           | Optional number or `null`, also stored as cents.                                                                     |
+| `variants[].stock`                    | Optional integer.                                                                                                    |
+| `variants[].status`                   | Optional: `active`, `inactive`, or `archived`.                                                                       |
 
 Unknown frontmatter keys are rejected. Duplicate variant `id` or `sku` values
 are rejected. For import compatibility, `source`, `sourceProductId` /
@@ -665,6 +679,19 @@ type ImportProductStructuredRequest = {
   description_md?: string;
   descriptionMarkdown?: string;
   description_markdown?: string;
+  seo?: ProductSeo;
+  seoTitle?: string;
+  seo_title?: string;
+  seoDescription?: string;
+  seo_description?: string;
+  metaDescription?: string;
+  meta_description?: string;
+  seoKeywords?: string[];
+  seoImage?: string;
+  seo_image?: string;
+  canonicalPath?: string;
+  canonical_path?: string;
+  noindex?: boolean;
   tags?: string[];
   sellingPoints?: string[];
   selling_points?: string[];
@@ -1054,6 +1081,19 @@ Success response:
 
 ```ts
 type CommerceConfigResponse = {
+  site: {
+    name: string;
+    legalName: string;
+    domain: string;
+    logoUrl: string;
+    logoAlt: string;
+    supportEmail: string;
+    privacyEmail: string;
+    supportResponseTime: string;
+    policyUpdatedAt: string;
+    copyrightYear: string;
+    cdnBaseUrl: string;
+  };
   checkout: {
     successNotice: string;
   };
@@ -1081,6 +1121,19 @@ Example response:
 {
   "success": true,
   "data": {
+    "site": {
+      "name": "Wonder Box",
+      "legalName": "Wonder Box Limited",
+      "domain": "example.com",
+      "logoUrl": "https://pics.dibsale.com/logos/wonder-box.png",
+      "logoAlt": "Wonder Box",
+      "supportEmail": "support@example.com",
+      "privacyEmail": "privacy@example.com",
+      "supportResponseTime": "1-2 business days",
+      "policyUpdatedAt": "June 5, 2026",
+      "copyrightYear": "2026",
+      "cdnBaseUrl": "https://pics.dibsale.com"
+    },
     "payments": {
       "paypal": {
         "enabled": true,

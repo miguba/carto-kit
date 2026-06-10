@@ -1,6 +1,22 @@
 import { getCommerceConfig } from './config';
 import type { Currency, Product, ProductVariant } from './types';
 
+export type ImageTransformOptions = {
+  width?: number;
+  quality?: number;
+  format?: 'auto' | 'avif' | 'webp' | 'json';
+  fit?: 'scale-down' | 'contain' | 'cover' | 'crop' | 'pad';
+  blur?: number;
+};
+
+export const IMAGE_PRESETS = {
+  hero: { width: 1200, quality: 86 },
+  detail: { width: 960, quality: 84 },
+  card: { width: 480, quality: 82 },
+  thumb: { width: 160, quality: 78 },
+  tiny: { width: 48, quality: 35, blur: 18 },
+} as const satisfies Record<string, ImageTransformOptions>;
+
 export function formatMoney(amount: number, currency: Currency) {
   const zeroDecimal = currency === 'JPY';
   return new Intl.NumberFormat('en-US', {
@@ -56,13 +72,59 @@ export function normalizeImageUrl(value: string, cdnBaseUrl?: string) {
   return normalizeMediaUrl(value, cdnBaseUrl);
 }
 
-export function extractProductContentImages(value: string) {
+export function optimizedImageUrl(
+  value: string,
+  options: ImageTransformOptions = {},
+  cdnBaseUrl?: string,
+) {
+  const image = normalizeImageUrl(value, cdnBaseUrl);
+  if (!image || !canUseCdnImageTransform(image, cdnBaseUrl)) {
+    return image;
+  }
+
+  const transformPath = buildImageTransformPath(options);
+  if (!transformPath) {
+    return image;
+  }
+
+  const mediaBaseUrl = cdnBaseUrl ?? getCommerceConfig().cdnBaseUrl;
+  if (!mediaBaseUrl) {
+    return image;
+  }
+
+  const sourcePath = stripCdnImageTransform(image).replace(
+    `${mediaBaseUrl}/`,
+    '',
+  );
+  return `${mediaBaseUrl}/cdn-cgi/image/${transformPath}/${sourcePath.replace(/^\/+/, '')}`;
+}
+
+export function imageSrcSet(
+  value: string,
+  widths: number[],
+  options: Omit<ImageTransformOptions, 'width'> = {},
+  cdnBaseUrl?: string,
+) {
+  return widths
+    .map(
+      (width) =>
+        `${optimizedImageUrl(value, { ...options, width }, cdnBaseUrl)} ${width}w`,
+    )
+    .join(', ');
+}
+
+export function imagePlaceholderStyle(value: string, cdnBaseUrl?: string) {
+  const placeholder = optimizedImageUrl(value, IMAGE_PRESETS.tiny, cdnBaseUrl);
+  return placeholder ? `--image-placeholder: url("${placeholder}")` : undefined;
+}
+
+export function extractProductContentImages(value: string, cdnBaseUrl?: string) {
   const source = stripFrontmatter(value);
   const urls = [
     ...Array.from(source.matchAll(/!\[[^\]]*]\(([^)]+)\)/g), (match) => match[1] ?? ''),
     ...Array.from(source.matchAll(/<img\b[^>]*\bsrc=(["']?)([^"'\s>]+)\1[^>]*>/gi), (match) => match[2] ?? ''),
   ]
-    .map((url) => normalizeImageUrl(decodeHtmlAttribute(url)))
+    .map((url) => normalizeImageUrl(decodeHtmlAttribute(url), cdnBaseUrl))
     .filter(Boolean);
 
   return Array.from(new Set(urls));
@@ -92,6 +154,37 @@ function normalizeMediaUrl(value: string, cdnBaseUrl?: string) {
   }
 
   return `${mediaBaseUrl}/${image.replace(/^\/+/, '')}`;
+}
+
+function canUseCdnImageTransform(value: string, cdnBaseUrl?: string) {
+  if (value.startsWith('data:') || value.startsWith('/')) {
+    return false;
+  }
+
+  const mediaBaseUrl = cdnBaseUrl ?? getCommerceConfig().cdnBaseUrl;
+  if (!mediaBaseUrl) {
+    return false;
+  }
+
+  return value === mediaBaseUrl || value.startsWith(`${mediaBaseUrl}/`);
+}
+
+function stripCdnImageTransform(value: string) {
+  return value.replace(/\/cdn-cgi\/image\/[^/]+\//, '/');
+}
+
+function buildImageTransformPath(options: ImageTransformOptions) {
+  const parts = [
+    options.width ? `width=${Math.max(1, Math.round(options.width))}` : '',
+    options.quality
+      ? `quality=${Math.min(100, Math.max(1, Math.round(options.quality)))}`
+      : '',
+    `format=${options.format ?? 'auto'}`,
+    options.fit ? `fit=${options.fit}` : '',
+    options.blur ? `blur=${Math.min(250, Math.max(1, Math.round(options.blur)))}` : '',
+  ].filter(Boolean);
+
+  return parts.join(',');
 }
 
 function escapeHtml(value: string) {
@@ -160,7 +253,12 @@ export function renderProductMarkdownHtml(value: string) {
 
       const src = normalizeImageUrl(imageMatch[2] ?? '');
       if (src) {
-        html.push(`<img src="${escapeHtml(src)}" alt="${escapeHtml(imageMatch[1] || 'Product detail image')}" loading="lazy" />`);
+        const imageUrl = optimizedImageUrl(src, IMAGE_PRESETS.detail);
+        const placeholder = imagePlaceholderStyle(src);
+        const placeholderAttribute = placeholder
+          ? ` style="${escapeHtml(placeholder)}"`
+          : '';
+        html.push(`<span class="markdown-image-frame image-placeholder-frame"${placeholderAttribute}><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(imageMatch[1] || 'Product detail image')}" width="960" height="960" loading="lazy" decoding="async" fetchpriority="low" /></span>`);
       }
       continue;
     }

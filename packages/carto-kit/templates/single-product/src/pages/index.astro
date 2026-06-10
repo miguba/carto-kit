@@ -1,9 +1,13 @@
 ---
 import ProductPurchasePanel from '@/components/ProductPurchasePanel';
 import BaseLayout from '@/layouts/BaseLayout.astro';
-import { getCommerceConfigFromServer } from '@/lib/commerce';
+import { getBlocksByKeys, getCommerceConfigFromServer } from '@/lib/commerce';
 import {
+  IMAGE_PRESETS,
+  imagePlaceholderStyle,
+  imageSrcSet,
   normalizeImageUrl,
+  optimizedImageUrl,
   productImages,
   extractProductContentImages,
   removeProductContentImages,
@@ -21,6 +25,20 @@ let purchaseProducts: Awaited<ReturnType<typeof getPurchaseProducts>> | null =
 let product: Product | null = null;
 let mediaBaseUrl = '';
 let loadError = '';
+const homeContentBlockKey = 'home-content';
+
+type FaqItem = {
+  question: string;
+  answer: string;
+};
+
+type ReviewItem = {
+  name: string;
+  place: string;
+  date: string;
+  avatar: string;
+  text: string;
+};
 
 try {
   const commerceConfig = await getCommerceConfigFromServer();
@@ -43,7 +61,7 @@ const description =
   product?.description ||
   (product?.content ? stripFrontmatter(product.content) : '');
 const contentImages = product?.content
-  ? extractProductContentImages(product.content)
+  ? extractProductContentImages(product.content, mediaBaseUrl)
   : [];
 const contentWithoutImages = product?.content
   ? removeProductContentImages(product.content)
@@ -92,13 +110,12 @@ const descriptionParagraphs = [
     (paragraph, index, paragraphs) =>
       paragraphs.findIndex((item) => item === paragraph) === index,
   );
-const descriptionMarkdown = descriptionParagraphs.length
+const defaultDescriptionMarkdown = descriptionParagraphs.length
   ? descriptionParagraphs.join('\n\n')
   : [
       'Microsoft 365 gives you the Office apps people rely on every day, cloud storage for important files, and dependable access across desktop and mobile devices.',
       'Choose the subscription length that fits your workflow, complete checkout securely with PayPal, and receive digital delivery details by email.',
     ].join('\n\n');
-const descriptionHtml = renderProductMarkdownHtml(descriptionMarkdown);
 const softwareAttributes = product
   ? Object.entries(product.attributes ?? product.meta?.attributes ?? {}).filter(
       ([key]) =>
@@ -108,7 +125,132 @@ const softwareAttributes = product
     )
   : [];
 
-const reviews = [
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function stringValue(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : '';
+}
+
+function recordValue(value: unknown) {
+  return isRecord(value) ? value : {};
+}
+
+function booleanValue(value: unknown) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const normalizedValue = value.trim().toLowerCase();
+    if (['1', 'true', 'yes'].includes(normalizedValue)) {
+      return true;
+    }
+    if (['0', 'false', 'no'].includes(normalizedValue)) {
+      return false;
+    }
+  }
+
+  return undefined;
+}
+
+function pathValue(value: unknown) {
+  const path = stringValue(value);
+  if (!path) {
+    return '';
+  }
+
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+function parseHomeContentJson(content: string) {
+  const trimmedContent = content.trim();
+  if (!trimmedContent || !/^[{[]/.test(trimmedContent)) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(trimmedContent) as unknown;
+    return recordValue(parsed);
+  } catch {
+    return {};
+  }
+}
+
+function normalizeFaqItems(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => {
+      if (!isRecord(item)) {
+        return null;
+      }
+
+      const question = item.question;
+      const answer = item.answer;
+      if (typeof question !== 'string' || typeof answer !== 'string') {
+        return null;
+      }
+
+      const normalizedQuestion = question.trim();
+      const normalizedAnswer = answer.trim();
+      if (!normalizedQuestion || !normalizedAnswer) {
+        return null;
+      }
+
+      return {
+        question: normalizedQuestion,
+        answer: normalizedAnswer,
+      };
+    })
+    .filter((item): item is FaqItem => Boolean(item));
+}
+
+function normalizeReviewItems(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => {
+      if (!isRecord(item)) {
+        return null;
+      }
+
+      const name = typeof item.name === 'string' ? item.name.trim() : '';
+      const place = typeof item.place === 'string' ? item.place.trim() : '';
+      const date = typeof item.date === 'string' ? item.date.trim() : '';
+      const avatar = typeof item.avatar === 'string' ? item.avatar.trim() : '';
+      const text = typeof item.text === 'string' ? item.text.trim() : '';
+
+      if (!name || !place || !date || !avatar || !text) {
+        return null;
+      }
+
+      return {
+        name,
+        place,
+        date,
+        avatar,
+        text,
+      };
+    })
+    .filter((item): item is ReviewItem => Boolean(item));
+}
+
+function reviewDatetime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) {
+    return '';
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
+const defaultReviews: ReviewItem[] = [
   {
     name: 'Emily S.',
     place: 'Dallas, TX',
@@ -174,7 +316,7 @@ const reviews = [
   },
 ];
 
-const faqs = [
+const defaultFaqs: FaqItem[] = [
   {
     question: 'Is this a personal Microsoft account?',
     answer:
@@ -206,25 +348,186 @@ const faqs = [
       'Yes, once activated, you can download updates from Microsoft until Microsoft no longer provides product support.',
   },
 ];
+
+let heroBannerImage = heroBanner;
+let heroBannerAlt = product ? `${product.title} promotional banner` : '';
+let offerHeadline = '';
+let descriptionTitle = 'DESCRIPTION';
+let descriptionMarkdown = defaultDescriptionMarkdown;
+let faqTitle = 'Frequently Asked Questions';
+let faqs = defaultFaqs;
+let reviewTitle = 'Customer Reviews';
+let reviews = defaultReviews;
+let hasCustomHomeContent = false;
+const defaultSeoTitle = product
+  ? `${product.title} | 365 Deal`
+  : 'Microsoft Office 365 | 365 Deal';
+const defaultSeoDescription = product
+  ? `${product.title} — secure checkout, instant digital delivery, and multi-year subscription options from $${(product.minPrice / 100).toFixed(2)}. 365 Deal.`
+  : 'Microsoft Office 365 5 devices license with secure checkout, instant digital delivery, and multi-year subscription options.';
+let seoTitle = defaultSeoTitle;
+let seoDescription = defaultSeoDescription;
+let seoCanonicalPath = '/';
+let seoOgImage = mainProductImage || '';
+let seoOgType = 'website';
+let seoNoindex = false;
+
+try {
+  const homeContentBlock = (await getBlocksByKeys([homeContentBlockKey]))[
+    homeContentBlockKey
+  ];
+  if (homeContentBlock) {
+    hasCustomHomeContent = true;
+    const homeContent = {
+      ...parseHomeContentJson(homeContentBlock.content),
+      ...homeContentBlock.meta,
+    };
+
+    const seo = recordValue(homeContent.seo);
+    seoTitle = stringValue(seo.title) || stringValue(homeContent.seoTitle) || seoTitle;
+    seoDescription =
+      stringValue(seo.description) ||
+      stringValue(homeContent.seoDescription) ||
+      seoDescription;
+    seoCanonicalPath =
+      pathValue(seo.canonicalPath) ||
+      pathValue(seo.canonical) ||
+      pathValue(homeContent.seoCanonicalPath) ||
+      seoCanonicalPath;
+    const seoImage = stringValue(seo.ogImage) || stringValue(seo.image);
+    seoOgImage = seoImage ? normalizeImageUrl(seoImage, mediaBaseUrl) : seoOgImage;
+    seoOgType = stringValue(seo.ogType) || seoOgType;
+    seoNoindex = booleanValue(seo.noindex) ?? seoNoindex;
+
+    const hero = recordValue(homeContent.hero);
+    const heroImage = stringValue(hero.image) || stringValue(homeContent.heroImage);
+    heroBannerImage = heroImage ? normalizeImageUrl(heroImage, mediaBaseUrl) : '';
+    heroBannerAlt = stringValue(hero.alt) || heroBannerAlt;
+
+    const offer = recordValue(homeContent.offer);
+    offerHeadline =
+      stringValue(offer.headline) || stringValue(homeContent.offerHeadline);
+
+    const descriptionSection = recordValue(homeContent.description);
+    descriptionTitle = stringValue(descriptionSection.title) || descriptionTitle;
+    descriptionMarkdown =
+      stripFrontmatter(homeContentBlock.content) || descriptionMarkdown;
+
+    const faqSection = recordValue(homeContent.faqs);
+    faqTitle = stringValue(faqSection.title) || faqTitle;
+    const customFaqs = normalizeFaqItems(faqSection.items);
+    if (customFaqs.length) {
+      faqs = customFaqs;
+    }
+
+    const reviewsSection = recordValue(homeContent.reviews);
+    reviewTitle = stringValue(reviewsSection.title) || reviewTitle;
+    const customReviews = normalizeReviewItems(reviewsSection.items);
+    if (customReviews.length) {
+      reviews = customReviews;
+    }
+  }
+} catch {
+  hasCustomHomeContent = false;
+  descriptionMarkdown = defaultDescriptionMarkdown;
+  faqs = defaultFaqs;
+  reviews = defaultReviews;
+  seoTitle = defaultSeoTitle;
+  seoDescription = defaultSeoDescription;
+  seoCanonicalPath = '/';
+  seoOgImage = mainProductImage || '';
+  seoOgType = 'website';
+  seoNoindex = false;
+}
+
+const descriptionHtml = renderProductMarkdownHtml(descriptionMarkdown);
+
+const pageJsonLd: Record<string, unknown>[] = [];
+
+if (product) {
+  pageJsonLd.push({
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: product.title,
+    description: descriptionParagraphs[0] || seoDescription,
+    image: mainProductImage || undefined,
+    brand: { '@type': 'Brand', name: 'Microsoft' },
+    offers: {
+      '@type': 'AggregateOffer',
+      priceCurrency: product.currency,
+      lowPrice: (product.minPrice / 100).toFixed(2),
+      highPrice: (product.maxPrice / 100).toFixed(2),
+      offerCount: product.variants.length,
+      availability: product.totalStock > 0
+        ? 'https://schema.org/InStock'
+        : 'https://schema.org/OutOfStock',
+    },
+    ...(reviews.length > 0
+      ? {
+          aggregateRating: {
+            '@type': 'AggregateRating',
+            ratingValue: '5',
+            reviewCount: String(reviews.length),
+            bestRating: '5',
+          },
+          review: reviews.slice(0, 5).map((r) => ({
+            '@type': 'Review',
+            author: { '@type': 'Person', name: r.name },
+            datePublished: reviewDatetime(r.date),
+            reviewRating: {
+              '@type': 'Rating',
+              ratingValue: '5',
+              bestRating: '5',
+            },
+            reviewBody: r.text,
+          })),
+        }
+      : {}),
+  });
+}
+
+if (faqs.length > 0) {
+  pageJsonLd.push({
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqs.map((faq) => ({
+      '@type': 'Question',
+      name: faq.question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: faq.answer,
+      },
+    })),
+  });
+}
 ---
 
 <BaseLayout
-  title={product
-    ? `${product.title} | 365 Deal`
-    : 'Microsoft Office 365 | 365 Deal'}
-  description="Microsoft Office 365 5 devices license with secure checkout, instant digital delivery, and multi-year subscription options."
+  title={seoTitle}
+  description={seoDescription}
+  canonicalPath={seoCanonicalPath}
+  ogImage={seoOgImage || undefined}
+  ogType={seoOgType}
+  noindex={seoNoindex}
+  jsonLd={pageJsonLd}
 >
   {
     product ? (
       <>
-        {heroBanner ? (
+        {heroBannerImage ? (
           <section class="pb-3" aria-label="Microsoft 365 offer banner">
             <div class="mx-auto max-w-6xl">
               <img
                 class="w-full"
-                src={heroBanner}
-                alt={`${product.title} promotional banner`}
+                src={optimizedImageUrl(heroBannerImage, IMAGE_PRESETS.hero, mediaBaseUrl)}
+                srcset={imageSrcSet(heroBannerImage, [640, 960, 1200], { quality: IMAGE_PRESETS.hero.quality }, mediaBaseUrl)}
+                sizes="min(100vw, 1152px)"
+                alt={heroBannerAlt}
+                width="1200"
+                height="628"
                 loading="eager"
+                decoding="async"
+                fetchpriority="high"
               />
             </div>
           </section>
@@ -237,18 +540,22 @@ const faqs = [
             initialKey={initialProductKey}
             items={purchaseProducts.items}
             mediaBaseUrl={mediaBaseUrl}
+            offerHeadline={offerHeadline}
             client:load
           />
         ) : null}
 
-        {safeCheckoutImage ? (
+        {!hasCustomHomeContent && safeCheckoutImage ? (
           <section class="pb-6" aria-label="Secure checkout">
             <div class="mx-auto max-w-6xl">
               <img
                 class="mx-auto w-[min(820px,100%)]"
-                src={safeCheckoutImage}
+                src={optimizedImageUrl(safeCheckoutImage, IMAGE_PRESETS.detail, mediaBaseUrl)}
+                srcset={imageSrcSet(safeCheckoutImage, [480, 720, 960], { quality: IMAGE_PRESETS.detail.quality }, mediaBaseUrl)}
+                sizes="min(100vw, 820px)"
                 alt="Guaranteed safe checkout"
                 loading="lazy"
+                decoding="async"
               />
             </div>
           </section>
@@ -257,7 +564,7 @@ const faqs = [
         <section class="py-7 pb-3" id="description">
           <div class="mx-auto max-w-6xl">
             <h2 class="mb-3 mt-0 text-[1.55rem] font-black uppercase leading-tight text-[#111827]">
-              DESCRIPTION
+              {descriptionTitle}
             </h2>
             <div
               class="grid gap-3.5 font-sans font-light text-[#1f2937] [&_a]:font-medium [&_a]:text-brand [&_blockquote]:m-0 [&_h3]:mb-0 [&_h3]:mt-2.5 [&_h3]:font-light [&_h3]:leading-tight [&_h3]:text-ink [&_h4]:mb-0 [&_h4]:mt-2.5 [&_h4]:font-light [&_h4]:leading-tight [&_h4]:text-ink [&_img]:hidden [&_ol]:m-0 [&_ol]:pl-5 [&_ol]:font-light [&_ol]:leading-relaxed [&_ol]:text-muted [&_p]:m-0 [&_p]:font-sans [&_p]:font-light [&_p]:text-base [&_p]:leading-[1.62] [&_strong]:font-light [&_table]:m-0 [&_table]:w-full [&_table]:border-collapse [&_table]:font-light [&_table]:leading-normal [&_table]:text-muted [&_td]:border-b [&_td]:border-line [&_td]:py-2.5 [&_td]:text-left [&_th]:border-b [&_th]:border-line [&_th]:py-2.5 [&_th]:text-left [&_ul]:m-0 [&_ul]:pl-5 [&_ul]:font-light [&_ul]:leading-relaxed [&_ul]:text-muted"
@@ -266,16 +573,27 @@ const faqs = [
           </div>
         </section>
 
-        {detailImages.length ? (
+        {!hasCustomHomeContent && detailImages.length ? (
           <section aria-label="Product detail images">
             <div class="mx-auto grid max-w-6xl justify-items-center py-2">
               {detailImages.map((image, index) => (
-                <img
-                  class="h-auto w-full"
-                  src={image}
-                  alt={`${product.title} detail ${index + 1}`}
-                  loading="lazy"
-                />
+                <span
+                  class="detail-image-frame image-placeholder-frame"
+                  style={imagePlaceholderStyle(image, mediaBaseUrl)}
+                >
+                  <img
+                    class="h-auto w-full"
+                    src={optimizedImageUrl(image, IMAGE_PRESETS.detail, mediaBaseUrl)}
+                    srcset={imageSrcSet(image, [640, 960, 1200], { quality: IMAGE_PRESETS.detail.quality }, mediaBaseUrl)}
+                    sizes="min(100vw, 1152px)"
+                    alt={`${product.title} detail ${index + 1}`}
+                    width="960"
+                    height="960"
+                    loading="lazy"
+                    decoding="async"
+                    fetchpriority="low"
+                  />
+                </span>
               ))}
             </div>
           </section>
@@ -320,7 +638,7 @@ const faqs = [
               open
             >
               <summary class="relative flex cursor-pointer list-none items-center justify-between pb-[34px] pt-2 font-serif text-base font-bold text-[#2b2b2b] after:h-0 after:w-0 after:border-b-[5px] after:border-l-4 after:border-r-4 after:border-b-[#737373] after:border-l-transparent after:border-r-transparent after:content-[''] [&::-webkit-details-marker]:hidden">
-                <span>Frequently Asked Questions</span>
+                <span>{faqTitle}</span>
               </summary>
               <div class="grid grid-cols-3 gap-x-[68px] gap-y-[76px] pb-3 max-[760px]:grid-cols-1">
                 {faqs.map((item) => (
@@ -341,7 +659,7 @@ const faqs = [
         <section class="py-7">
           <div class="mx-auto max-w-6xl">
             <h2 class="mb-3 mt-0 text-center text-[1.55rem] font-black leading-tight text-[#111827]">
-              Customer Reviews
+              {reviewTitle}
             </h2>
             <div class="grid grid-cols-1 gap-4">
               {reviews.map((review, index) => (
@@ -366,7 +684,7 @@ const faqs = [
                   </div>
                   <time
                     class="block text-[0.86rem] text-[#4b5563]"
-                    datetime={new Date(review.date).toISOString().slice(0, 10)}
+                    datetime={reviewDatetime(review.date)}
                   >
                     {review.date}
                   </time>
@@ -376,15 +694,17 @@ const faqs = [
                 </article>
               ))}
             </div>
-            <div class="pt-6 text-center">
-              <button
-                class="cursor-pointer border-0 bg-transparent p-0 text-sm text-[#737373]"
-                type="button"
-                data-review-more
-              >
-                Read More
-              </button>
-            </div>
+            {reviews.length > 3 ? (
+              <div class="pt-6 text-center">
+                <button
+                  class="cursor-pointer border-0 bg-transparent p-0 text-sm text-[#737373]"
+                  type="button"
+                  data-review-more
+                >
+                  Read More
+                </button>
+              </div>
+            ) : null}
           </div>
         </section>
       </>
