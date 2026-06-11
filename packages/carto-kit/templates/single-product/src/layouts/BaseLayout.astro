@@ -2,6 +2,7 @@
 import '@/styles/global.css';
 import { getSiteChrome } from '@/lib/site-chrome';
 import { getSiteUrl } from '@/lib/config';
+import { getCachedCommerceConfigFromServer } from '@/lib/commerce';
 
 type Props = {
   title: string;
@@ -30,7 +31,10 @@ const {
   jsonLd = [],
 } = Astro.props;
 const refreshCache = Astro.url.searchParams.get('___refresh___') === '1';
-const siteChrome = await getSiteChrome({ refresh: refreshCache });
+const [siteChrome, commerceConfig] = await Promise.all([
+  getSiteChrome({ refresh: refreshCache }),
+  getOptionalCommerceConfig({ refresh: refreshCache }),
+]);
 const siteUrl = getSiteUrl();
 const resolvedCanonicalPath = canonicalPath ?? Astro.url.pathname;
 const canonicalUrl = `${siteUrl}${resolvedCanonicalPath}`;
@@ -52,6 +56,23 @@ const organizationJsonLd = {
     contactType: 'customer service',
   },
 };
+const googleGtmId = normalizeGoogleGtmId(commerceConfig?.site.google?.gtmId);
+const googleGtmScript = googleGtmId
+  ? `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer',${JSON.stringify(googleGtmId)});`
+  : '';
+
+async function getOptionalCommerceConfig(options: { refresh: boolean }) {
+  try {
+    return await getCachedCommerceConfigFromServer(options);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeGoogleGtmId(value: string | null | undefined) {
+  const id = value?.trim().toUpperCase();
+  return id && /^GTM-[A-Z0-9]+$/.test(id) ? id : '';
+}
 ---
 
 <!doctype html>
@@ -81,6 +102,11 @@ const organizationJsonLd = {
     <meta name="twitter:image" content={resolvedOgImage} />
 
     <title>{title}</title>
+    {
+      googleGtmScript ? (
+        <script is:inline set:html={googleGtmScript} />
+      ) : null
+    }
 
     <!-- Organization JSON-LD -->
     <script
@@ -99,6 +125,19 @@ const organizationJsonLd = {
     }
   </head>
   <body>
+    {
+      googleGtmId ? (
+        <noscript>
+          <iframe
+            src={`https://www.googletagmanager.com/ns.html?id=${encodeURIComponent(googleGtmId)}`}
+            height="0"
+            width="0"
+            style="display:none;visibility:hidden"
+            title="Google Tag Manager"
+          />
+        </noscript>
+      ) : null
+    }
     <div class="min-h-screen">
       {
         checkoutOnly ? null : (

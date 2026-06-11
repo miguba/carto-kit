@@ -1093,6 +1093,9 @@ type CommerceConfigResponse = {
     policyUpdatedAt: string;
     copyrightYear: string;
     cdnBaseUrl: string;
+    google?: {
+      gtmId?: string;
+    };
   };
   checkout: {
     successNotice: string;

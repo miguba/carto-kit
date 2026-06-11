@@ -31,6 +31,19 @@ export type ProductSeo = {
   noindex?: boolean;
 };
 
+export type ProductReview = {
+  author?: string;
+  avatar?: string;
+  rating?: number;
+  title?: string;
+  content: string;
+  date?: string;
+  purchased?: string;
+  helpfulCount?: number;
+  images?: string[];
+  sourceReviewId?: string;
+};
+
 export type Product = {
   id: string;
   site: string;
@@ -49,6 +62,9 @@ export type Product = {
   video?: string | null;
   videoUrl?: string | null;
   video_url?: string | null;
+  reviews?: ProductReview[];
+  productReviews?: ProductReview[];
+  customerReviews?: ProductReview[];
   meta?: {
     seo?: ProductSeo;
     video?: string | null;
@@ -59,6 +75,7 @@ export type Product = {
     attributes?: Record<string, string>;
     specs?: Record<string, string>;
     decoration?: Decoration;
+    reviews?: ProductReview[];
   } | null;
   description?: string | null;
   descriptionMd?: string | null;

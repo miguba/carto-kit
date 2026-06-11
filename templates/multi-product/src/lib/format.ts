@@ -1,5 +1,5 @@
 import { getCommerceConfig } from './config';
-import type { Currency, Product, ProductVariant } from './types';
+import type { Currency, Product, ProductReview, ProductVariant } from './types';
 
 export type ImageTransformOptions = {
   width?: number;
@@ -100,6 +100,29 @@ export function productAttributes(product: Product) {
     ?? {};
 }
 
+export function productReviews(product: Product) {
+  const sourceReviews = [
+    ...(product.reviews ?? []),
+    ...(product.productReviews ?? []),
+    ...(product.customerReviews ?? []),
+    ...(product.meta?.reviews ?? []),
+    ...parseFrontmatterReviews(product.content),
+  ];
+  const seen = new Set<string>();
+
+  return sourceReviews
+    .map(normalizeProductReview)
+    .filter((review): review is ProductReview => Boolean(review))
+    .filter((review) => {
+      const key = review.sourceReviewId || `${review.author ?? ''}:${review.content}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+}
+
 export function productDescriptionMarkdown(product: Product) {
   const parts = [
     product.description,
@@ -117,6 +140,188 @@ export function productDescriptionMarkdown(product: Product) {
     );
 
   return parts.join("\n\n");
+}
+
+function normalizeProductReview(review: ProductReview | null | undefined) {
+  const content = typeof review?.content === 'string' ? review.content.trim() : '';
+  if (!content) {
+    return null;
+  }
+
+  const normalized: ProductReview = { content };
+  const author = cleanOptionalString(review?.author);
+  const avatar = cleanOptionalString(review?.avatar);
+  const title = cleanOptionalString(review?.title);
+  const date = cleanOptionalString(review?.date);
+  const purchased = cleanOptionalString(review?.purchased);
+  const sourceReviewId = cleanOptionalString(review?.sourceReviewId);
+  const rating = typeof review?.rating === 'number' && Number.isFinite(review.rating)
+    ? Math.min(5, Math.max(0, review.rating))
+    : undefined;
+  const helpfulCount = typeof review?.helpfulCount === 'number' && Number.isFinite(review.helpfulCount)
+    ? Math.max(0, Math.round(review.helpfulCount))
+    : undefined;
+  const images = (review?.images ?? [])
+    .map((image) => (typeof image === 'string' ? normalizeImageUrl(image) : ''))
+    .filter(Boolean);
+
+  if (author) normalized.author = author;
+  if (avatar) normalized.avatar = normalizeImageUrl(avatar);
+  if (rating !== undefined) normalized.rating = rating;
+  if (title) normalized.title = title;
+  if (date) normalized.date = date;
+  if (purchased) normalized.purchased = purchased;
+  if (helpfulCount !== undefined) normalized.helpfulCount = helpfulCount;
+  if (images.length) normalized.images = Array.from(new Set(images));
+  if (sourceReviewId) normalized.sourceReviewId = sourceReviewId;
+
+  return normalized;
+}
+
+function cleanOptionalString(value: unknown) {
+  return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+}
+
+function parseFrontmatterReviews(content: string | null | undefined) {
+  if (!content) {
+    return [];
+  }
+
+  const frontmatter = /^---\s*\n([\s\S]*?)\n---\s*\n?/.exec(content)?.[1];
+  if (!frontmatter) {
+    return [];
+  }
+
+  const lines = frontmatter.split(/\r?\n/);
+  const reviewsLineIndex = lines.findIndex((line) => /^\s*reviews\s*:/.test(line));
+  if (reviewsLineIndex < 0) {
+    return [];
+  }
+
+  const reviewsLine = lines[reviewsLineIndex];
+  const baseIndent = leadingSpaces(reviewsLine);
+  const inlineValue = reviewsLine.slice(reviewsLine.indexOf(':') + 1).trim();
+  if (inlineValue === '[]') {
+    return [];
+  }
+
+  const block: string[] = [];
+  for (const line of lines.slice(reviewsLineIndex + 1)) {
+    if (!line.trim()) {
+      block.push(line);
+      continue;
+    }
+
+    if (leadingSpaces(line) <= baseIndent) {
+      break;
+    }
+
+    block.push(line);
+  }
+
+  return parseReviewBlock(block);
+}
+
+function parseReviewBlock(lines: string[]) {
+  const reviews: ProductReview[] = [];
+  let current: Record<string, unknown> | null = null;
+  let itemIndent = 0;
+  let listKey = '';
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const indent = leadingSpaces(line);
+    if (trimmed.startsWith('- ') && (!current || indent <= itemIndent)) {
+      if (current) {
+        reviews.push(current as ProductReview);
+      }
+
+      current = {};
+      itemIndent = indent;
+      listKey = '';
+      assignYamlPair(current, trimmed.slice(2).trim());
+      continue;
+    }
+
+    if (!current) {
+      continue;
+    }
+
+    if (trimmed.startsWith('- ') && listKey) {
+      const values = Array.isArray(current[listKey]) ? current[listKey] as unknown[] : [];
+      values.push(parseYamlScalar(trimmed.slice(2).trim()));
+      current[listKey] = values;
+      continue;
+    }
+
+    const nextListKey = assignYamlPair(current, trimmed);
+    listKey = nextListKey ?? '';
+  }
+
+  if (current) {
+    reviews.push(current as ProductReview);
+  }
+
+  return reviews;
+}
+
+function assignYamlPair(target: Record<string, unknown>, line: string) {
+  const delimiter = line.indexOf(':');
+  if (delimiter < 0) {
+    if (!target.content) {
+      target.content = parseYamlScalar(line);
+    }
+    return null;
+  }
+
+  const key = line.slice(0, delimiter).trim();
+  const value = line.slice(delimiter + 1).trim();
+  if (!key) {
+    return null;
+  }
+
+  if (!value) {
+    target[key] = [];
+    return key;
+  }
+
+  target[key] = parseYamlScalar(value);
+  return null;
+}
+
+function parseYamlScalar(value: string) {
+  const cleaned = value.trim();
+  if (!cleaned) {
+    return '';
+  }
+  if (cleaned === '[]') {
+    return [];
+  }
+  if (cleaned === 'true') {
+    return true;
+  }
+  if (cleaned === 'false') {
+    return false;
+  }
+  if (/^-?\d+(\.\d+)?$/.test(cleaned)) {
+    return Number(cleaned);
+  }
+  if (
+    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+  ) {
+    return cleaned.slice(1, -1);
+  }
+
+  return cleaned;
+}
+
+function leadingSpaces(value: string) {
+  return value.length - value.trimStart().length;
 }
 
 export function normalizeImageUrl(value: string) {

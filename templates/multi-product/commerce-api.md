@@ -91,6 +91,19 @@ type ProductSeo = {
   noindex?: boolean;
 };
 
+type ProductReview = {
+  author?: string;
+  avatar?: string;
+  rating?: number;
+  title?: string;
+  content: string;
+  date?: string;
+  purchased?: string;
+  helpfulCount?: number;
+  images?: string[];
+  sourceReviewId?: string;
+};
+
 type ProductMeta = {
   source?: string;
   sourceProductId?: string;
@@ -100,6 +113,7 @@ type ProductMeta = {
   sellingPoints?: string[];
   attributes?: Record<string, string>;
   decoration?: Decoration;
+  reviews?: ProductReview[];
 };
 
 type ProductVariant = {
@@ -128,6 +142,7 @@ type Product = {
   tags: string[];
   galleryImages: string[];
   mainImage: string | null;
+  reviews?: ProductReview[];
   meta: ProductMeta;
   content: string | null;
   createdAt: string;
@@ -692,6 +707,9 @@ type ImportProductStructuredRequest = {
   canonicalPath?: string;
   canonical_path?: string;
   noindex?: boolean;
+  reviews?: ProductReview[];
+  productReviews?: ProductReview[];
+  customerReviews?: ProductReview[];
   tags?: string[];
   sellingPoints?: string[];
   selling_points?: string[];
@@ -1093,6 +1111,9 @@ type CommerceConfigResponse = {
     policyUpdatedAt: string;
     copyrightYear: string;
     cdnBaseUrl: string;
+    google?: {
+      gtmId?: string;
+    };
   };
   checkout: {
     successNotice: string;

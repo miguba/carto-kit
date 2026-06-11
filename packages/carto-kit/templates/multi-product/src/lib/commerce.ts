@@ -240,6 +240,9 @@ export type SiteConfig = {
   logoImage?: string | null;
   brandLogo?: string | null;
   logoAlt?: string | null;
+  google?: {
+    gtmId?: string | null;
+  } | null;
 };
 
 export async function getSiteConfigFromServer(

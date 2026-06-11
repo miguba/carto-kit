@@ -247,6 +247,9 @@ export type SiteConfig = {
   domain: string;
   supportEmail: string;
   cdnBaseUrl?: string | null;
+  google?: {
+    gtmId?: string | null;
+  } | null;
 };
 
 async function resolveKvCache(kvCache: KVNamespace | undefined) {
