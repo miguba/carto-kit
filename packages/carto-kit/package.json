@@ -1,6 +1,6 @@
 {
   "name": "carto-kit",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Create a self-hosted Carto storefront project",
   "license": "MIT",
   "type": "module",
