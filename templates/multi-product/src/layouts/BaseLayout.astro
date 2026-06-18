@@ -15,7 +15,8 @@ type Props = {
   type?: "website" | "article" | "product";
 };
 
-const site = await getSiteConfigFromServer();
+const refreshCache = Astro.url.searchParams.get("___refresh___") === "1";
+const site = await getSiteConfigFromServer({ refresh: refreshCache });
 const {
   title,
   description = `${site.name} — Genuine products, fast delivery, and a checkout experience that sparks joy.`,

@@ -10,7 +10,8 @@ export const prerender = false;
 
 const POLICY_BLOCK_KEY = "privacy-policy";
 
-const site = await getSiteConfigFromServer();
+const refreshCache = Astro.url.searchParams.get("___refresh___") === "1";
+const site = await getSiteConfigFromServer({ refresh: refreshCache });
 const canonicalUrl = siteAbsoluteUrl("/privacy-policy", site.domain, Astro.url.origin);
 
 const contactMethods = [
@@ -26,6 +27,7 @@ const policy = await loadPolicyBlock({
     "This policy explains what information we collect, why we collect it, and how you can contact us about your privacy choices.",
   fallbackDescription: `Learn how ${site.name} collects, uses, protects, and shares customer information.`,
   siteName: site.name,
+  refresh: refreshCache,
 });
 
 const breadcrumbSchema = {

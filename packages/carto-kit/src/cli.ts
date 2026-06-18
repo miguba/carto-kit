@@ -227,12 +227,12 @@ Usage:
   npm create carto@latest
   carto-kit create my-storefront --site example.com
   carto create my-storefront --site example.com
-  carto config set commerceApiBaseUrl https://ems.example.com
+  carto config set commerceApiBaseUrl https://api.carto.build
 
 Options:
   --site <domain>      Optional deployment domain for generated site URLs and VPS Caddy defaults
-  --token <token>      EMS commerce API token, written to .env
-  --api-base-url <url> Commerce API base URL for this generated storefront
+  --token <token>      Carto Storefront API token, written to .env
+  --api-base-url <url> Carto Storefront API base URL for this generated storefront
   --cloudflare-account-id <id>
                        Cloudflare account ID for Cloudflare deploys
   --cloudflare-api-token <token>

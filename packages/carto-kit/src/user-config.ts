@@ -21,7 +21,7 @@ export const configFields: ConfigField[] = [
     key: "commerceApiBaseUrl",
     aliases: ["commerce-api-base-url", "api-base-url"],
     defaultValue: DEFAULT_EMS_API_BASE_URL,
-    description: "EMS commerce API base URL used when creating storefronts."
+    description: "Carto Storefront API base URL used when creating storefronts."
   }
 ];
 

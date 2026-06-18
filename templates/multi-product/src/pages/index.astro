@@ -70,7 +70,10 @@ try {
 
 const productCount = products.length;
 const totalStock = products.reduce((sum, item) => sum + item.totalStock, 0);
-const homeSeo = await getHomeSeo(defaultHomeSeoMarkdown, site.name);
+const homeSeo = await getHomeSeo(defaultHomeSeoMarkdown, site.name, {
+  refresh: refreshCache,
+  kvCache: pageCacheBinding,
+});
 const brandLogo = getBrandLogo(site);
 const canonicalUrl = siteAbsoluteUrl("/", site.domain, Astro.url.origin);
 const heroImage = featuredProduct

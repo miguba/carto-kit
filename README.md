@@ -38,14 +38,14 @@ The generated project owns its domain, hosting, payment accounts, deployment
 credentials, and compliance responsibilities. EMS supplies content, orders,
 payment configuration, and API contracts.
 
-## Configure EMS API Base URL
+## Configure Carto API Base URL
 
 Carto stores a user-level default API base URL, similar to npm config:
 
 ```bash
 carto config keys
 carto config list
-carto config set commerceApiBaseUrl https://ems.example.com
+carto config set commerceApiBaseUrl https://api.carto.build
 carto config get commerceApiBaseUrl
 ```
 
@@ -53,7 +53,7 @@ New storefronts use that configured value. For one generated project only, pass
 an override:
 
 ```bash
-npm create carto@latest -- my-storefront --api-base-url https://ems.example.com
+npm create carto@latest -- my-storefront --api-base-url https://api.carto.build
 ```
 
 ## Publishing

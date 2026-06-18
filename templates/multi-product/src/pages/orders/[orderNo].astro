@@ -6,7 +6,10 @@ import { IMAGE_PRESETS, formatMoney, imagePlaceholderStyle, normalizeImageUrl, o
 export const prerender = false;
 
 const { orderNo } = Astro.params;
-const commerceConfig = await getCommerceConfigFromServer();
+const refreshCache = Astro.url.searchParams.get('___refresh___') === '1';
+const commerceConfig = await getCommerceConfigFromServer({
+  refresh: refreshCache,
+});
 const site = commerceConfig.site;
 const successNotice = commerceConfig.checkout.successNotice;
 let order = null;

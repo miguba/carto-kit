@@ -12,7 +12,9 @@ export const prerender = false;
  * combines it with the known static routes to produce a complete sitemap.
  */
 export const GET: APIRoute = async ({ url }) => {
-  const site = await getSiteConfigFromServer();
+  const refreshCache = url.searchParams.get("___refresh___") === "1";
+  const cacheOptions = { refresh: refreshCache };
+  const site = await getSiteConfigFromServer(cacheOptions);
   const origin = site.domain
     ? site.domain.startsWith("http")
       ? site.domain.replace(/\/+$/, "")
@@ -33,7 +35,7 @@ export const GET: APIRoute = async ({ url }) => {
   // --- Dynamic product routes ---
   let products: Array<{ slug: string }> = [];
   try {
-    products = await getProducts(100);
+    products = await getProducts(100, cacheOptions);
   } catch {
     // If the product API is unavailable, emit the sitemap without products.
   }

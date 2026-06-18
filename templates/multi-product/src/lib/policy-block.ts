@@ -1,4 +1,7 @@
-import { getBlocksByKeys } from "./commerce";
+import {
+  getBlocksByKeys,
+  type CommerceReadCacheOptions,
+} from "./commerce";
 import {
   extractMarkdownHeadings,
   markdownToPlainText,
@@ -13,7 +16,7 @@ type LoadPolicyBlockOptions = {
   fallbackIntro: string;
   fallbackDescription: string;
   siteName: string;
-};
+} & CommerceReadCacheOptions;
 
 export async function loadPolicyBlock({
   key,
@@ -22,8 +25,11 @@ export async function loadPolicyBlock({
   fallbackIntro,
   fallbackDescription,
   siteName,
+  refresh,
+  ttl,
+  kvCache,
 }: LoadPolicyBlockOptions) {
-  const blocks = await getBlocksByKeys([key]);
+  const blocks = await getBlocksByKeys([key], { refresh, ttl, kvCache });
   const block = blocks[key];
   const markdown = block?.content ?? defaultMarkdown;
   const parsed = parseMarkdownFrontmatter(markdown);

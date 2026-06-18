@@ -1,10 +1,14 @@
-import { getBlocksByKeys } from "./commerce";
+import { getBlocksByKeys, type CommerceReadCacheOptions } from "./commerce";
 import { parseMarkdownFrontmatter } from "./markdown";
 
 const HOME_SEO_BLOCK_KEY = "home-seo";
 
-export async function getHomeSeo(defaultMarkdown: string, siteName: string) {
-  const blocks = await getBlocksByKeys([HOME_SEO_BLOCK_KEY]);
+export async function getHomeSeo(
+  defaultMarkdown: string,
+  siteName: string,
+  cacheOptions: CommerceReadCacheOptions = {},
+) {
+  const blocks = await getBlocksByKeys([HOME_SEO_BLOCK_KEY], cacheOptions);
   const block = blocks[HOME_SEO_BLOCK_KEY];
   const parsed = parseMarkdownFrontmatter(block?.content ?? defaultMarkdown);
   const meta = {

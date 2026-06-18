@@ -10,7 +10,8 @@ export const prerender = false;
 
 const POLICY_BLOCK_KEY = "cancellation-refund-policy";
 
-const site = await getSiteConfigFromServer();
+const refreshCache = Astro.url.searchParams.get("___refresh___") === "1";
+const site = await getSiteConfigFromServer({ refresh: refreshCache });
 const canonicalUrl = siteAbsoluteUrl("/cancellation-refund-policy", site.domain, Astro.url.origin);
 
 const contactMethods = [
@@ -30,6 +31,7 @@ const policy = await loadPolicyBlock({
     "This policy explains returns, cancellations, refunds, and dispute handling for customer orders.",
   fallbackDescription: `Review ${site.name} return and refund policy.`,
   siteName: site.name,
+  refresh: refreshCache,
 });
 
 const breadcrumbSchema = {

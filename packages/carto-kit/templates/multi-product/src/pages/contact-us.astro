@@ -10,7 +10,8 @@ export const prerender = false;
 
 const POLICY_BLOCK_KEY = "contact-us";
 
-const site = await getSiteConfigFromServer();
+const refreshCache = Astro.url.searchParams.get("___refresh___") === "1";
+const site = await getSiteConfigFromServer({ refresh: refreshCache });
 const canonicalUrl = siteAbsoluteUrl("/contact-us", site.domain, Astro.url.origin);
 
 const contactMethods = [
@@ -27,6 +28,7 @@ const policy = await loadPolicyBlock({
     "Need help with an order or a policy question? Send us the details and we will help you find the cleanest path forward.",
   fallbackDescription: `Contact ${site.name} support for order help, payment questions, delivery updates, and refund requests.`,
   siteName: site.name,
+  refresh: refreshCache,
 });
 
 const breadcrumbSchema = {

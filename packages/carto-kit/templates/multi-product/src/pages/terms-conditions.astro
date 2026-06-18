@@ -10,7 +10,8 @@ export const prerender = false;
 
 const POLICY_BLOCK_KEY = "terms-conditions";
 
-const site = await getSiteConfigFromServer();
+const refreshCache = Astro.url.searchParams.get("___refresh___") === "1";
+const site = await getSiteConfigFromServer({ refresh: refreshCache });
 const canonicalUrl = siteAbsoluteUrl("/terms-conditions", site.domain, Astro.url.origin);
 
 const contactMethods = [
@@ -30,6 +31,7 @@ const policy = await loadPolicyBlock({
     "These terms explain the rules that apply when you browse our store, place an order, complete payment, or request support.",
   fallbackDescription: `Read the ${site.name} terms for orders, payment, delivery, customer responsibilities, and refunds.`,
   siteName: site.name,
+  refresh: refreshCache,
 });
 
 const breadcrumbSchema = {

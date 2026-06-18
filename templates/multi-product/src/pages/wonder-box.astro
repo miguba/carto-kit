@@ -3,7 +3,8 @@ import BaseLayout from '@/layouts/BaseLayout.astro';
 import { getSiteConfigFromServer } from '@/lib/commerce';
 import { siteAbsoluteUrl } from '@/lib/seo';
 
-const site = await getSiteConfigFromServer();
+const refreshCache = Astro.url.searchParams.get('___refresh___') === '1';
+const site = await getSiteConfigFromServer({ refresh: refreshCache });
 const canonicalUrl = siteAbsoluteUrl('/wonder-box', site.domain, Astro.url.origin);
 ---
 
