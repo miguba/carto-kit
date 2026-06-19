@@ -6,6 +6,7 @@ import {
   getProducts,
 } from "@/lib/commerce";
 import { cachePage } from "@/lib/cache-page";
+import { setCommerceMediaConfig } from "@/lib/config";
 import { getPageCacheBinding } from "@/lib/page-cache-binding";
 import { getCachedProduct } from "@/lib/product-cache";
 import {
@@ -71,6 +72,7 @@ try {
     });
 
     commerceConfig = data.commerceConfig;
+    setCommerceMediaConfig(commerceConfig.media);
     product = data.product;
     relatedProducts = data.relatedProducts;
 

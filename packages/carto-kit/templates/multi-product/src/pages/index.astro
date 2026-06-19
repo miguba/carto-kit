@@ -20,6 +20,7 @@ import { siteAbsoluteUrl } from "@/lib/seo";
 import { getBrandLogo } from "@/lib/brand";
 import type { Product } from "@/lib/types";
 import { cachePage } from "@/lib/cache-page";
+import { setCommerceMediaConfig } from "@/lib/config";
 import { getPageCacheBinding } from "@/lib/page-cache-binding";
 
 export const prerender = false;
@@ -55,6 +56,7 @@ try {
   });
 
   site = data.site;
+  setCommerceMediaConfig({ cdnBaseUrl: site.cdnBaseUrl });
   products = data.products;
   featuredProduct = products[0] ?? null;
 } catch (error) {
