@@ -1,6 +1,6 @@
 {
   "name": "create-carto",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "npm create entrypoint for Carto Kit",
   "license": "MIT",
   "type": "module",
@@ -11,6 +11,6 @@
     "cli.js"
   ],
   "dependencies": {
-    "carto-kit": "0.1.12"
+    "carto-kit": "0.1.13"
   }
 }
