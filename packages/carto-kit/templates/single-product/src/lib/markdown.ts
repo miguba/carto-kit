@@ -1,6 +1,7 @@
 import {
   IMAGE_PRESETS,
   imagePlaceholderStyle,
+  normalizeImageUrl,
   optimizedImageUrl,
 } from './format';
 import { parse as parseYaml } from 'yaml';
@@ -8,6 +9,7 @@ import { parse as parseYaml } from 'yaml';
 type RenderMarkdownOptions = {
   headingOffset?: number;
   headingIds?: boolean;
+  minHeadingLevel?: number;
 };
 
 export function renderMarkdown(
@@ -26,10 +28,19 @@ export function renderMarkdown(
       continue;
     }
 
+    if (/^!\[[^\]]*]\([^)]+\)\s*$/.test(line.trim())) {
+      blocks.push(renderInlineMarkdown(line.trim()));
+      index += 1;
+      continue;
+    }
+
     const heading = /^(#{1,6})\s+(.+)$/.exec(line);
     if (heading) {
       const level = Math.min(
-        heading[1].length + (options.headingOffset ?? 0),
+        Math.max(
+          heading[1].length + (options.headingOffset ?? 0),
+          options.minHeadingLevel ?? 1,
+        ),
         6,
       );
       const idAttribute = options.headingIds
@@ -119,7 +130,7 @@ export function extractMarkdownHeadings(markdown: string, level = 2) {
 
 function renderInlineMarkdown(text: string) {
   const pattern =
-    /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*/g;
+    /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)|`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*|_([^_]+)_/g;
   let cursor = 0;
   let html = '';
 
@@ -128,7 +139,7 @@ function renderInlineMarkdown(text: string) {
 
     if (match[1] !== undefined) {
       const alt = match[1];
-      const src = match[2];
+      const src = normalizeMarkdownImageUrl(match[2]);
       if (isSafeImageUrl(src)) {
         const imageUrl = optimizedImageUrl(src, IMAGE_PRESETS.detail);
         const placeholder = imagePlaceholderStyle(src);
@@ -150,13 +161,32 @@ function renderInlineMarkdown(text: string) {
     } else if (match[6] !== undefined) {
       html += `<strong>${escapeHtml(match[6])}</strong>`;
     } else if (match[7] !== undefined) {
-      html += `<em>${escapeHtml(match[7])}</em>`;
+      html += `<strong>${escapeHtml(match[7])}</strong>`;
+    } else if (match[8] !== undefined) {
+      html += `<em>${escapeHtml(match[8])}</em>`;
+    } else if (match[9] !== undefined) {
+      html += `<em>${escapeHtml(match[9])}</em>`;
     }
 
     cursor = match.index + match[0].length;
   }
 
   return html + escapeHtml(text.slice(cursor));
+}
+
+function normalizeMarkdownImageUrl(url: string) {
+  const value = url.trim();
+  const normalized = normalizeImageUrl(value);
+
+  if (
+    normalized === value &&
+    value &&
+    !/^(https?:|data:|\/|\.{1,2}\/)/i.test(value)
+  ) {
+    return `/${value.replace(/^\/+/, '')}`;
+  }
+
+  return normalized;
 }
 
 function isSafeImageUrl(url: string) {

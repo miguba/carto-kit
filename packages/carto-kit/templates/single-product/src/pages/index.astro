@@ -7,6 +7,7 @@ import {
   type CommerceBlock,
 } from '@/lib/commerce';
 import { cachePage } from '@/lib/cache-page';
+import { getDefaultBlock } from '@/lib/default-blocks';
 import { getPageCacheBinding } from '@/lib/page-cache-binding';
 import {
   IMAGE_PRESETS,
@@ -16,10 +17,9 @@ import {
   optimizedImageUrl,
   productImages,
   extractProductContentImages,
-  removeProductContentImages,
-  renderProductMarkdownHtml,
   stripFrontmatter,
 } from '@/lib/format';
+import { renderMarkdown } from '@/lib/markdown';
 import { getPurchaseProducts } from '@/lib/purchase-products';
 import type { Product } from '@/lib/types';
 
@@ -33,13 +33,16 @@ let product: Product | null = null;
 let mediaBaseUrl = '';
 let loadError = '';
 const homeContentBlockKey = 'home-content';
+const localHomeContentBlock = getDefaultBlock(homeContentBlockKey);
 let homeContentBlock: CommerceBlock | undefined;
+let remoteHomeContentBlock: CommerceBlock | undefined;
 const pageCacheBinding = await getPageCacheBinding();
 
 type HomeCacheData = {
   mediaBaseUrl: string;
   purchaseProducts: Awaited<ReturnType<typeof getPurchaseProducts>>;
   homeContentBlock?: CommerceBlock;
+  remoteHomeContentBlock?: CommerceBlock;
 };
 
 type FaqItem = {
@@ -58,7 +61,12 @@ type ReviewItem = {
 try {
   const { data } = await cachePage<HomeCacheData>('page:index', {
     async fun() {
-      const [commerceConfig, purchaseProducts, homeContentBlocks] =
+      const [
+        commerceConfig,
+        purchaseProducts,
+        homeContentBlocks,
+        remoteHomeContentBlocks,
+      ] =
         await Promise.all([
           getCachedCommerceConfigFromServer({
             refresh: refreshCache,
@@ -72,12 +80,18 @@ try {
             refresh: refreshCache,
             kvCache: pageCacheBinding,
           }),
+          getCachedBlocksByKeys([homeContentBlockKey], {
+            refresh: refreshCache,
+            kvCache: pageCacheBinding,
+            includeDefaults: false,
+          }),
         ]);
 
       return {
         mediaBaseUrl: commerceConfig.media?.cdnBaseUrl ?? '',
         purchaseProducts,
         homeContentBlock: homeContentBlocks[homeContentBlockKey],
+        remoteHomeContentBlock: remoteHomeContentBlocks[homeContentBlockKey],
       };
     },
     refresh: refreshCache,
@@ -87,6 +101,7 @@ try {
   mediaBaseUrl = data.mediaBaseUrl;
   purchaseProducts = data.purchaseProducts;
   homeContentBlock = data.homeContentBlock;
+  remoteHomeContentBlock = data.remoteHomeContentBlock;
   const selectedItem =
     purchaseProducts.items.find((item) => item.key === initialProductKey) ??
     purchaseProducts.items.find(
@@ -100,15 +115,9 @@ try {
     error instanceof Error ? error.message : 'Unable to load product.';
 }
 
-const description =
-  product?.description ||
-  (product?.content ? stripFrontmatter(product.content) : '');
 const contentImages = product?.content
   ? extractProductContentImages(product.content, mediaBaseUrl)
   : [];
-const contentWithoutImages = product?.content
-  ? removeProductContentImages(product.content)
-  : '';
 const productMediaImages = product
   ? productImages(product, null, mediaBaseUrl)
   : [];
@@ -140,25 +149,6 @@ const detailImages = galleryImages
       image !== mainProductImage,
   )
   .slice(0, 12);
-const descriptionParagraphs = [
-  ...(description ? [description] : []),
-  ...(contentWithoutImages ? [contentWithoutImages] : []),
-]
-  .join('\n\n')
-  .split(/\n{2,}/)
-  .map((paragraph) => paragraph.trim())
-  .filter((paragraph) => !paragraph.startsWith('!['))
-  .filter(Boolean)
-  .filter(
-    (paragraph, index, paragraphs) =>
-      paragraphs.findIndex((item) => item === paragraph) === index,
-  );
-const defaultDescriptionMarkdown = descriptionParagraphs.length
-  ? descriptionParagraphs.join('\n\n')
-  : [
-      'Microsoft 365 gives you the Office apps people rely on every day, cloud storage for important files, and dependable access across desktop and mobile devices.',
-      'Choose the subscription length that fits your workflow, complete checkout securely with PayPal, and receive digital delivery details by email.',
-    ].join('\n\n');
 const softwareAttributes = product
   ? Object.entries(product.attributes ?? product.meta?.attributes ?? {}).filter(
       ([key]) =>
@@ -396,7 +386,9 @@ let heroBannerImage = heroBanner;
 let heroBannerAlt = product ? `${product.title} promotional banner` : '';
 let offerHeadline = '';
 let descriptionTitle = 'DESCRIPTION';
-let descriptionMarkdown = defaultDescriptionMarkdown;
+let descriptionMarkdown =
+  stripFrontmatter(localHomeContentBlock?.content ?? '') ||
+  stripFrontmatter(remoteHomeContentBlock?.content ?? '');
 let faqTitle = 'Frequently Asked Questions';
 let faqs = defaultFaqs;
 let reviewTitle = 'Customer Reviews';
@@ -457,8 +449,6 @@ try {
     const descriptionSection = recordValue(homeContent.description);
     descriptionTitle =
       stringValue(descriptionSection.title) || descriptionTitle;
-    descriptionMarkdown =
-      stripFrontmatter(homeContentBlock.content) || descriptionMarkdown;
 
     const faqSection = recordValue(homeContent.faqs);
     faqTitle = stringValue(faqSection.title) || faqTitle;
@@ -476,7 +466,7 @@ try {
   }
 } catch {
   hasCustomHomeContent = false;
-  descriptionMarkdown = defaultDescriptionMarkdown;
+  descriptionMarkdown = '';
   faqs = defaultFaqs;
   reviews = defaultReviews;
   seoTitle = defaultSeoTitle;
@@ -487,7 +477,18 @@ try {
   seoNoindex = false;
 }
 
-const descriptionHtml = renderProductMarkdownHtml(descriptionMarkdown);
+const descriptionHtml = renderMarkdown(descriptionMarkdown, {
+  minHeadingLevel: 3,
+});
+const descriptionParagraphs = descriptionMarkdown
+  .split(/\n{2,}/)
+  .map((paragraph) => paragraph.trim())
+  .filter((paragraph) => !paragraph.startsWith('!['))
+  .filter(Boolean)
+  .filter(
+    (paragraph, index, paragraphs) =>
+      paragraphs.findIndex((item) => item === paragraph) === index,
+  );
 
 const pageJsonLd: Record<string, unknown>[] = [];
 
@@ -627,17 +628,19 @@ if (faqs.length > 0) {
           </section>
         ) : null}
 
-        <section class="py-7 pb-3" id="description">
-          <div class="mx-auto max-w-6xl">
-            <h2 class="mb-3 mt-0 text-[1.55rem] font-black uppercase leading-tight text-[#111827]">
-              {descriptionTitle}
-            </h2>
-            <div
-              class="grid gap-3.5 font-sans font-light text-[#1f2937] [&_a]:font-medium [&_a]:text-brand [&_blockquote]:m-0 [&_h3]:mb-0 [&_h3]:mt-2.5 [&_h3]:font-light [&_h3]:leading-tight [&_h3]:text-ink [&_h4]:mb-0 [&_h4]:mt-2.5 [&_h4]:font-light [&_h4]:leading-tight [&_h4]:text-ink [&_img]:hidden [&_ol]:m-0 [&_ol]:pl-5 [&_ol]:font-light [&_ol]:leading-relaxed [&_ol]:text-muted [&_p]:m-0 [&_p]:font-sans [&_p]:font-light [&_p]:text-base [&_p]:leading-[1.62] [&_strong]:font-light [&_table]:m-0 [&_table]:w-full [&_table]:border-collapse [&_table]:font-light [&_table]:leading-normal [&_table]:text-muted [&_td]:border-b [&_td]:border-line [&_td]:py-2.5 [&_td]:text-left [&_th]:border-b [&_th]:border-line [&_th]:py-2.5 [&_th]:text-left [&_ul]:m-0 [&_ul]:pl-5 [&_ul]:font-light [&_ul]:leading-relaxed [&_ul]:text-muted"
-              set:html={descriptionHtml}
-            />
-          </div>
-        </section>
+        {descriptionHtml ? (
+          <section class="py-7 pb-3" id="description">
+            <div class="mx-auto max-w-6xl">
+              <h2 class="mb-3 mt-0 text-[1.55rem] font-black uppercase leading-tight text-[#111827]">
+                {descriptionTitle}
+              </h2>
+              <div
+                class="prose prose-slate max-w-none font-sans font-light text-[#1f2937] prose-a:font-medium prose-a:text-brand prose-blockquote:m-0 prose-em:italic prose-em:text-ink prose-headings:font-h prose-headings:text-ink prose-h3:mb-2 prose-h3:mt-5 prose-h3:text-[1.25rem] prose-h3:font-light prose-h3:leading-tight prose-h4:mb-2 prose-h4:mt-4 prose-h4:font-light prose-h4:leading-tight prose-img:my-0 prose-img:w-full prose-img:max-w-none prose-img:rounded-none prose-li:my-1.5 prose-li:pl-1.5 prose-li:font-light prose-li:leading-[1.58] prose-ol:my-3 prose-ol:list-decimal prose-ol:pl-6 prose-ol:text-muted prose-p:my-0 prose-p:font-sans prose-p:text-base prose-p:font-light prose-p:leading-[1.62] prose-p:text-[#1f2937] prose-strong:font-bold prose-strong:text-ink prose-table:my-0 prose-table:w-full prose-table:border-collapse prose-table:font-light prose-table:leading-normal prose-table:text-muted prose-td:border-b prose-td:border-line prose-td:py-2.5 prose-td:text-left prose-th:border-b prose-th:border-line prose-th:py-2.5 prose-th:text-left prose-ul:my-3 prose-ul:list-disc prose-ul:pl-6 prose-ul:text-muted [&_.markdown-image-frame]:my-5 [&_li::marker]:text-[0.9em] [&_li::marker]:text-brand"
+                set:html={descriptionHtml}
+              />
+            </div>
+          </section>
+        ) : null}
 
         {!hasCustomHomeContent && detailImages.length ? (
           <section aria-label="Product detail images">

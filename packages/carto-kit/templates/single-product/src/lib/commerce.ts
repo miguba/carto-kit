@@ -6,6 +6,7 @@ import {
   type CommerceMediaConfig,
 } from './config';
 import { getPageCacheBinding } from './page-cache-binding';
+import { fillDefaultBlocks } from './default-blocks';
 import type {
   ApiResponse,
   CreateOrderRequest,
@@ -23,6 +24,7 @@ type CacheOptions = {
   refresh?: boolean;
   ttl?: number;
   kvCache?: KVNamespace;
+  includeDefaults?: boolean;
 };
 
 class CommerceApiError extends Error {
@@ -90,29 +92,6 @@ export async function getCachedProduct(
   return data;
 }
 
-export function getDecoration(key: string) {
-  return commerceRequest<unknown[]>(
-    `/api/commerce/decoration?key=${encodeURIComponent(key)}`,
-  );
-}
-
-export async function getCachedDecoration(
-  key: string,
-  options: CacheOptions = {},
-) {
-  const kvCache = await resolveKvCache(options.kvCache);
-  const { data } = await cachePage<unknown[]>(`decoration:${key}`, {
-    async fun() {
-      return getDecoration(key);
-    },
-    refresh: options.refresh,
-    ttl: options.ttl,
-    kvCache,
-  });
-
-  return data;
-}
-
 export type CommerceBlock = {
   key: string;
   type: string;
@@ -121,15 +100,27 @@ export type CommerceBlock = {
   updatedAt: string;
 };
 
-export function getBlocksByKeys(keys: string[]) {
+export async function getBlocksByKeys(
+  keys: string[],
+  options: Pick<CacheOptions, 'includeDefaults'> = {},
+) {
   const encodedKeys = keys.map((key) => key.trim()).filter(Boolean);
   if (!encodedKeys.length) {
-    return Promise.resolve({} as Record<string, CommerceBlock>);
+    return {} as Record<string, CommerceBlock>;
   }
 
-  return commerceRequest<Record<string, CommerceBlock>>(
-    `/api/commerce/blocks?keys=${encodeURIComponent(encodedKeys.join(','))}`,
-  );
+  let blocks: Record<string, CommerceBlock>;
+  try {
+    blocks = await commerceRequest<Record<string, CommerceBlock>>(
+      `/api/commerce/blocks?keys=${encodeURIComponent(encodedKeys.join(','))}`,
+    );
+  } catch {
+    blocks = {};
+  }
+
+  return options.includeDefaults === false
+    ? blocks
+    : fillDefaultBlocks(blocks, encodedKeys);
 }
 
 export async function getCachedBlocksByKeys(
@@ -141,11 +132,15 @@ export async function getCachedBlocksByKeys(
     return {} as Record<string, CommerceBlock>;
   }
 
-  const cacheKey = `blocks:${[...encodedKeys].sort().join(',')}`;
+  const cacheKey = `blocks:${[...encodedKeys].sort().join(',')}${
+    options.includeDefaults === false ? ':remote' : ''
+  }`;
   const kvCache = await resolveKvCache(options.kvCache);
   const { data } = await cachePage<Record<string, CommerceBlock>>(cacheKey, {
     async fun() {
-      return getBlocksByKeys(encodedKeys);
+      return getBlocksByKeys(encodedKeys, {
+        includeDefaults: options.includeDefaults,
+      });
     },
     refresh: options.refresh,
     ttl: options.ttl,

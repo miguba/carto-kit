@@ -3,10 +3,12 @@ import node from '@astrojs/node';
 import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 
-const deploymentTarget = process.env.DEPLOYMENT_TARGET || "__DEPLOYMENT_TARGET__";
-const adapter = deploymentTarget === "cloudflare-workers"
-  ? (await import("@astrojs/cloudflare")).default()
-  : node({ mode: "standalone" });
+const deploymentTarget =
+  process.env.DEPLOYMENT_TARGET || '__DEPLOYMENT_TARGET__';
+const adapter =
+  deploymentTarget === 'cloudflare-workers'
+    ? (await import('@astrojs/cloudflare')).default()
+    : node({ mode: 'standalone' });
 
 export default defineConfig({
   output: 'server',
@@ -17,9 +19,14 @@ export default defineConfig({
   integrations: [react()],
   vite: {
     resolve: {
-      dedupe: ["react", "react-dom"],
+      dedupe: ['react', 'react-dom'],
     },
     plugins: [tailwindcss()],
+    server: {
+      watch: {
+        ignored: ['**/.wrangler/**', '**/dist/**', '**/.cache/**'],
+      },
+    },
   },
   env: {
     schema: {

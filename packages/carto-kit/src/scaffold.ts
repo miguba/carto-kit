@@ -418,7 +418,9 @@ function toAppName(name: string): string {
   return name
     .replace(/^@/, "")
     .replace(/\//g, "-")
-    .replace(/[^a-z0-9.-]+/g, "-")
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-{2,}/g, "-")
     .replace(/^-+|-+$/g, "") || "carto";
 }
 

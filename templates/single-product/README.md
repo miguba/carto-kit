@@ -1,9 +1,8 @@
 # Carto Single Product Template
 
-This template renders a checkout-focused storefront from EMS commerce APIs.
-The purchase section is controlled by EMS site decoration data, while product
-content, images, highlights, variants, prices, and stock stay on standard EMS
-products.
+This template renders a checkout-focused storefront from Carto commerce APIs.
+The purchase section is controlled by a Carto Block, while product content,
+images, highlights, variants, prices, and stock stay on standard Carto products.
 
 ## Setup
 
@@ -14,43 +13,43 @@ npm run dev
 
 For direct template development, set these environment values:
 
-- `PUBLIC_COMMERCE_API_BASE_URL`: EMS API base URL.
-- `COMMERCE_API_TOKEN`: EMS server app token with commerce scopes.
+- `PUBLIC_COMMERCE_API_BASE_URL`: Carto API base URL.
+- `COMMERCE_API_TOKEN`: Carto server app token with commerce scopes.
 - `PUBLIC_MAPBOX_ACCESS_TOKEN`: optional Mapbox token for address search.
 
 Generated projects receive the commerce API base URL from Carto scaffolding.
-Payment provider secrets stay in EMS and are never exposed to browser
+Payment provider secrets stay in Carto and are never exposed to browser
 JavaScript.
 
-## Required EMS Decoration
+## Required Carto Block
 
-Open the EMS site decoration editor and add a `purchase-products` section.
-The template reads the first item in this section as the purchase page
-configuration.
+Create a Carto Block with key `purchase-products`. The template reads this
+Block as the purchase page configuration.
 
 ### Full Switchable Template
 
-Keep both single-product and product-group settings in the same decoration
-block. Change only `mode` to switch the current page display.
+Keep both single-product and product-group settings in the same Block. Change
+only `mode` to switch the current page display.
 
-```yaml
-purchase-products:
-  - mode: single
-    single:
-      product:
-        slug: microsoft-365-5-devices-license
-    group:
-      default: five
-      products:
-        - key: one
-          label: 1 Device
-          slug: microsoft-office-365-1-devices-license
-        - key: three
-          label: 3 Devices
-          slug: microsoft-office-365-3-devices-license
-        - key: five
-          label: 5 Devices
-          slug: microsoft-office-365-5-devices-license
+```md
+---
+mode: single
+single:
+  product:
+    slug: microsoft-365-5-devices-license
+group:
+  default: five
+  products:
+    - key: one
+      label: 1 Device
+      slug: microsoft-office-365-1-devices-license
+    - key: three
+      label: 3 Devices
+      slug: microsoft-office-365-3-devices-license
+    - key: five
+      label: 5 Devices
+      slug: microsoft-office-365-5-devices-license
+---
 ```
 
 Use `mode: single` to render `single.product` without tabs. Use `mode: group`
@@ -58,34 +57,36 @@ to render `group.products` as tabs.
 
 ### Single Product Only
 
-```yaml
-purchase-products:
-  - mode: single
-    single:
-      product:
-        slug: microsoft-365-5-devices-license
+```md
+---
+mode: single
+single:
+  product:
+    slug: microsoft-365-5-devices-license
+---
 ```
 
 ### Product Group Only
 
-```yaml
-purchase-products:
-  - mode: group
-    group:
-      default: five
-      products:
-        - key: one
-          label: 1 Device
-          slug: microsoft-office-365-1-devices-license
-        - key: three
-          label: 3 Devices
-          slug: microsoft-office-365-3-devices-license
-        - key: five
-          label: 5 Devices
-          slug: microsoft-office-365-5-devices-license
+```md
+---
+mode: group
+group:
+  default: five
+  products:
+    - key: one
+      label: 1 Device
+      slug: microsoft-office-365-1-devices-license
+    - key: three
+      label: 3 Devices
+      slug: microsoft-office-365-3-devices-license
+    - key: five
+      label: 5 Devices
+      slug: microsoft-office-365-5-devices-license
+---
 ```
 
-## Decoration Rules
+## Block Rules
 
 - `mode` is required and must be `single` or `group`.
 - `single.product.slug` is required.
@@ -94,22 +95,26 @@ purchase-products:
 - `group.default` is optional. When provided, it must match a product `key`.
 - Product `key` values must be unique.
 - Product `slug` values must be unique.
-- All slugs must resolve to active EMS products through the commerce product API.
+- All slugs must resolve to active Carto products through the commerce product API.
 - Only the active `mode` is validated and loaded. You can keep the inactive
   mode's configuration in the YAML while switching display modes.
 
-If the decoration is missing or invalid, the page shows a clear configuration
+If the Block is missing or invalid, the page shows a clear configuration
 error in development instead of falling back to an implicit product.
 
-## Optional EMS Blocks
+The preferred format is YAML frontmatter in the `purchase-products` Block.
+Plain JSON/YAML content is also accepted, including the legacy wrapper key
+`purchase-products`.
+
+## Optional Carto Blocks
 
 Block-based home page and footer content is documented in
 [`decoration.md`](./decoration.md).
 
 ## Product Data Responsibilities
 
-Decoration is only page composition data. Product content stays on EMS
-products:
+The `purchase-products` Block is only page composition data. Product content
+stays on Carto products:
 
 - Main purchase image: `product.mainImage`
 - Additional media: `product.galleryImages`, product video, and variant images
@@ -118,7 +123,7 @@ products:
 - Purchase options: standard `product.variants`
 - Price, compare-at price, and stock: standard variant fields
 
-In group mode, switching tabs swaps the active EMS product. The checkout URL
+In group mode, switching tabs swaps the active Carto product. The checkout URL
 continues to use the selected product and variant:
 
 ```text

@@ -1,6 +1,9 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { DEFAULT_EMS_API_BASE_URL } from "./constants.js";
+import {
+  DEFAULT_CARTO_API_BASE_URL,
+  LEGACY_EMS_API_BASE_URL,
+} from "./constants.js";
 import { normalizeHttpBaseUrl, validateHttpBaseUrl } from "./validators.js";
 
 export type ConfigKey = "commerceApiBaseUrl";
@@ -20,7 +23,7 @@ export const configFields: ConfigField[] = [
   {
     key: "commerceApiBaseUrl",
     aliases: ["commerce-api-base-url", "api-base-url"],
-    defaultValue: DEFAULT_EMS_API_BASE_URL,
+    defaultValue: DEFAULT_CARTO_API_BASE_URL,
     description: "Carto Storefront API base URL used when creating storefronts."
   }
 ];
@@ -59,7 +62,7 @@ export async function readUserConfig(): Promise<UserConfig> {
     const parsed = JSON.parse(await readFile(getConfigPath(), "utf8")) as UserConfig;
     return {
       commerceApiBaseUrl: typeof parsed.commerceApiBaseUrl === "string"
-        ? normalizeHttpBaseUrl(parsed.commerceApiBaseUrl)
+        ? normalizeStoredCommerceApiBaseUrl(parsed.commerceApiBaseUrl)
         : undefined
     };
   } catch (error) {
@@ -106,7 +109,16 @@ export async function resolveCommerceApiBaseUrl(override: string | undefined): P
   }
 
   const config = await readUserConfig();
-  return config.commerceApiBaseUrl ?? DEFAULT_EMS_API_BASE_URL;
+  return config.commerceApiBaseUrl ?? DEFAULT_CARTO_API_BASE_URL;
+}
+
+function normalizeStoredCommerceApiBaseUrl(value: string): string {
+  const normalized = normalizeHttpBaseUrl(value);
+  if (normalized === LEGACY_EMS_API_BASE_URL) {
+    return DEFAULT_CARTO_API_BASE_URL;
+  }
+
+  return normalized;
 }
 
 function getHomeDirectory(): string {

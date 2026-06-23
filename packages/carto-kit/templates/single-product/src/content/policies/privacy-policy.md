@@ -18,7 +18,7 @@ contactMethods:
   - label: General support
     value: "{{supportEmail}}"
     href: "mailto:{{supportEmail}}"
-maintenanceNote: Maintain this page in EMS by creating a Block with key privacy-policy and type policy. Put the Markdown body in the Block content and keep eyebrow, title, intro, updated, seo, aside, and contactMethods as frontmatter.
+maintenanceNote: Maintain this page in Carto by creating a Block with key privacy-policy and type policy. Put the Markdown body in the Block content and keep eyebrow, title, intro, updated, seo, aside, and contactMethods as frontmatter.
 ---
 
 ## Information We Collect

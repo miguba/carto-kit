@@ -1,12 +1,12 @@
-# EMS Decoration Blocks
+# Carto Blocks
 
-This template can use EMS Blocks for optional page decoration content. Missing,
+This template can use Carto Blocks for page composition content. Missing,
 empty, or partially invalid text/list fields fall back to the template defaults.
 Marketing images are opt-in when a Block exists.
 
 ## Home Content Block
 
-The home page marketing content can be customized with one EMS Block. Create a
+The home page marketing content can be customized with one Carto Block. Create a
 Block with key `home-content` and type `page`.
 
 Use this single Block to manage:
@@ -18,7 +18,7 @@ Use this single Block to manage:
 - The FAQ section.
 - The customer review section.
 
-Preferred format. Structured fields belong in frontmatter so EMS can parse them
+Preferred format. Structured fields belong in frontmatter so Carto can parse them
 into Block meta. The Markdown body is rendered as the Description section,
 which is intentionally unstructured so it can contain rich text and images.
 When `home-content` exists, product gallery/detail images are not automatically
@@ -120,7 +120,7 @@ copyright line.
 ## Policy Page Blocks
 
 The footer policy/support links are static routes in the template, but their
-page content can be maintained in EMS with Blocks. If a matching Block is
+page content can be maintained in Carto with Blocks. If a matching Block is
 missing, the template uses the default Markdown files in
 `src/content/policies/`.
 
@@ -176,7 +176,7 @@ Supported frontmatter fields:
 - `eyebrow`: Small label above the page title. Defaults to `Policy`.
 - `title`: Visible page title and fallback SEO title.
 - `intro`: Intro paragraph in the hero section.
-- `updated`: Optional last-updated label. If omitted and the EMS Block has
+- `updated`: Optional last-updated label. If omitted and the Carto Block has
   `updatedAt`, the template formats `updatedAt`.
 - `seo.title`: HTML title before the site name.
 - `seo.description`: Meta description and Open Graph/Twitter description.
@@ -186,8 +186,8 @@ Supported frontmatter fields:
   supports `label`, `value`, and optional `href`.
 
 For local template defaults, `{{siteName}}` and `{{supportEmail}}` can be used
-inside frontmatter strings. They are replaced with values from the EMS commerce
-config. EMS-authored Blocks can either use literal values or the same
+inside frontmatter strings. They are replaced with values from the Carto commerce
+config. Carto-authored Blocks can either use literal values or the same
 placeholders.
 
 The old flat fields `seoTitle`, `seoDescription`, `asideTitle`, and `asideText`

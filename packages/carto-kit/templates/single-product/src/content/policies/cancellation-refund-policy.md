@@ -17,7 +17,7 @@ contactMethods:
   - label: Order help
     value: Contact us
     href: /contact-us
-maintenanceNote: Maintain this page in EMS by creating a Block with key cancellation-refund-policy and type policy. Put the Markdown body in the Block content and keep title, intro, updated, seo, aside, and contactMethods as frontmatter.
+maintenanceNote: Maintain this page in Carto by creating a Block with key cancellation-refund-policy and type policy. Put the Markdown body in the Block content and keep title, intro, updated, seo, aside, and contactMethods as frontmatter.
 ---
 
 ## Order Cancellations

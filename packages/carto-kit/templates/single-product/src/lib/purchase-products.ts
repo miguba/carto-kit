@@ -1,7 +1,13 @@
-import { getCachedDecoration, getCachedProduct } from './commerce';
+import { parse as parseYaml } from 'yaml';
+import {
+  getCachedBlocksByKeys,
+  getCachedProduct,
+  type CommerceBlock,
+} from './commerce';
+import { parseMarkdownFrontmatter } from './markdown';
 import type { Product } from './types';
 
-const PURCHASE_PRODUCTS_DECORATION_KEY = 'purchase-products';
+const PURCHASE_PRODUCTS_BLOCK_KEY = 'purchase-products';
 
 type PurchaseProductsMode = 'single' | 'group';
 
@@ -52,11 +58,11 @@ type PurchaseProductsOptions = {
 export async function getPurchaseProducts(
   options: PurchaseProductsOptions = {},
 ): Promise<PurchaseProducts> {
-  const decoration = await getCachedDecoration(
-    PURCHASE_PRODUCTS_DECORATION_KEY,
+  const blocks = await getCachedBlocksByKeys(
+    [PURCHASE_PRODUCTS_BLOCK_KEY],
     options,
   );
-  const config = parsePurchaseProductsDecoration(decoration);
+  const config = parsePurchaseProductsBlock(blocks[PURCHASE_PRODUCTS_BLOCK_KEY]);
   const items = await Promise.all(
     config.items.map(async (item) => {
       let product: Product;
@@ -66,13 +72,13 @@ export async function getPurchaseProducts(
         const message =
           error instanceof Error ? error.message : 'Unable to load product.';
         throw new Error(
-          `Invalid purchase-products decoration. Product slug "${item.slug}" could not be loaded: ${message}`,
+          `Invalid purchase-products block. Product slug "${item.slug}" could not be loaded: ${message}`,
         );
       }
 
       if (!product.variants.length) {
         throw new Error(
-          `Invalid purchase-products decoration. Product slug "${item.slug}" has no active variants.`,
+          `Invalid purchase-products block. Product slug "${item.slug}" has no active variants.`,
         );
       }
 
@@ -91,17 +97,22 @@ export async function getPurchaseProducts(
   };
 }
 
-function parsePurchaseProductsDecoration(decoration: unknown[]) {
-  if (!Array.isArray(decoration) || decoration.length === 0) {
+function parsePurchaseProductsBlock(block: CommerceBlock | undefined) {
+  if (!block) {
     throw new Error(
-      'Missing purchase-products decoration. Configure one purchase page item in EMS site decorations.',
+      'Missing purchase-products block. Create a Carto Block with key "purchase-products".',
     );
   }
 
-  const config = objectValue(decoration[0]) as PurchaseProductsConfig | null;
+  const parsedContent = parseMarkdownFrontmatter(block.content);
+  const config =
+    getPurchaseProductsConfig(block.meta) ??
+    getPurchaseProductsConfig(parsedContent.meta) ??
+    getPurchaseProductsConfig(parseStructuredContent(parsedContent.body));
+
   if (!config) {
     throw new Error(
-      'Invalid purchase-products decoration. First item must be an object.',
+      'Invalid purchase-products block. Block meta, frontmatter, JSON, or YAML content must define a purchase-products config object.',
     );
   }
 
@@ -111,7 +122,7 @@ function parsePurchaseProductsDecoration(decoration: unknown[]) {
     );
     if (!slug) {
       throw new Error(
-        'Invalid purchase-products decoration. single.product.slug is required.',
+        'Invalid purchase-products block. single.product.slug is required.',
       );
     }
 
@@ -136,7 +147,7 @@ function parsePurchaseProductsDecoration(decoration: unknown[]) {
         : [];
     if (products.length < 2) {
       throw new Error(
-        'Invalid purchase-products decoration. group.products must include at least 2 products.',
+        'Invalid purchase-products block. group.products must include at least 2 products.',
       );
     }
 
@@ -147,19 +158,19 @@ function parsePurchaseProductsDecoration(decoration: unknown[]) {
 
       if (!key) {
         throw new Error(
-          `Invalid purchase-products decoration. group.products[${index}].key is required.`,
+          `Invalid purchase-products block. group.products[${index}].key is required.`,
         );
       }
 
       if (!label) {
         throw new Error(
-          `Invalid purchase-products decoration. group.products[${index}].label is required.`,
+          `Invalid purchase-products block. group.products[${index}].label is required.`,
         );
       }
 
       if (!slug) {
         throw new Error(
-          `Invalid purchase-products decoration. group.products[${index}].slug is required.`,
+          `Invalid purchase-products block. group.products[${index}].slug is required.`,
         );
       }
 
@@ -179,7 +190,7 @@ function parsePurchaseProductsDecoration(decoration: unknown[]) {
       cleanText(config.group?.default ?? config.default) || items[0].key;
     if (!items.some((item) => item.key === defaultKey)) {
       throw new Error(
-        `Invalid purchase-products decoration. default "${defaultKey}" does not match a product key.`,
+        `Invalid purchase-products block. default "${defaultKey}" does not match a product key.`,
       );
     }
 
@@ -191,8 +202,46 @@ function parsePurchaseProductsDecoration(decoration: unknown[]) {
   }
 
   throw new Error(
-    'Invalid purchase-products decoration. mode must be "single" or "group".',
+    'Invalid purchase-products block. mode must be "single" or "group".',
   );
+}
+
+function getPurchaseProductsConfig(value: unknown) {
+  const record = objectValue(value);
+  if (!record) {
+    return null;
+  }
+
+  if (record.mode === 'single' || record.mode === 'group') {
+    return record as PurchaseProductsConfig;
+  }
+
+  const keyed =
+    record.purchaseProducts ?? record['purchase-products'] ?? record.config;
+  const keyedRecord = Array.isArray(keyed) ? keyed[0] : keyed;
+  const config = objectValue(keyedRecord);
+  return config ? (config as PurchaseProductsConfig) : null;
+}
+
+function parseStructuredContent(content: string) {
+  const trimmed = content.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^[{[]/.test(trimmed)) {
+    try {
+      return JSON.parse(trimmed) as unknown;
+    } catch {
+      return null;
+    }
+  }
+
+  try {
+    return parseYaml(trimmed) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 function objectValue(value: unknown) {
@@ -210,7 +259,7 @@ function assertUnique(values: string[], field: string) {
   for (const value of values) {
     if (seen.has(value)) {
       throw new Error(
-        `Invalid purchase-products decoration. Duplicate product ${field}: ${value}.`,
+        `Invalid purchase-products block. Duplicate product ${field}: ${value}.`,
       );
     }
     seen.add(value);
