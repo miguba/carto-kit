@@ -1,0 +1,24 @@
+name: Publish Carto Kit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm ci --prefix templates/single-product
+      - run: npm ci --prefix templates/multi-product
+      - run: npm test
+      - run: npm publish --workspace carto-kit --access public

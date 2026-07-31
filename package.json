@@ -9,10 +9,10 @@
     "build": "npm --workspace carto-kit run build",
     "check": "npm --workspace carto-kit run check",
     "release:npm": "node scripts/release-npm.mjs",
-    "test": "npm run check && npm --prefix templates/single-product run check && npm --prefix templates/multi-product run check"
+    "test": "npm --workspace carto-kit run test && npm run check && npm --prefix templates/single-product run check && npm --prefix templates/multi-product run check"
   },
   "workspaces": [
-    "packages/*"
+    "packages/carto-kit"
   ],
   "packageManager": "npm@11.9.0",
   "devDependencies": {

@@ -1,7 +1,11 @@
 {
   "name": "carto-kit",
-  "version": "0.1.16",
-  "description": "Create a self-hosted Carto storefront project",
+  "version": "0.1.18",
+  "description": "Connect Carto Frontsite projects to Carto Private",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/miguba/carto-kit.git"
+  },
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -10,11 +14,13 @@
   },
   "files": [
     "dist",
-    "templates"
+    "!dist/**/*.test.js",
+    "!dist/**/*.test.d.ts"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/copy-template.mjs",
-    "check": "tsc -p tsconfig.json --noEmit"
+    "build": "node scripts/clean-dist.mjs && tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test dist/**/*.test.js"
   },
   "dependencies": {
     "@inquirer/prompts": "^7.3.2",

@@ -1,11 +1,10 @@
 # Carto
 
-Official self-hosted storefront starter for EMS commerce sites.
+Command-line tools for connecting Carto Frontsite projects.
 
 ## Packages
 
-- `packages/carto-kit`: Carto Kit CLI and project generator.
-- `packages/create-carto-wrapper`: `npm create carto` compatibility entrypoint.
+- `packages/carto-kit`: Carto Kit CLI.
 - `templates/single-product`: one-domain, one-product storefront template.
 - `templates/multi-product`: catalog storefront template with Cloudflare and VPS deployment modes.
 
@@ -18,46 +17,24 @@ npm --prefix templates/single-product run dev
 npm --prefix templates/multi-product run dev
 ```
 
-## Create A Storefront
+## Connect A Frontsite
+
+From an existing Carto Frontsite project, use the long-lived Carto Kit command
+to connect it to Carto Private:
 
 ```bash
-npm create carto@latest
+npx carto-kit@latest connect
+# or, after a global install:
+carto connect
 ```
 
-This works like `npm create astro@latest`: npm resolves the published
-`create-carto` package and runs the Carto Kit project generator.
-
-Users who install the full tool can also run:
-
-```bash
-npm i -g carto-kit
-carto-kit create my-storefront
-```
-
-The generated project owns its domain, hosting, payment accounts, deployment
-credentials, and compliance responsibilities. EMS supplies content, orders,
-payment configuration, and API contracts.
-
-## Configure Carto API Base URL
-
-Carto stores a user-level default API base URL, similar to npm config:
-
-```bash
-carto config keys
-carto config list
-carto config set commerceApiBaseUrl https://api.carto.build
-carto config get commerceApiBaseUrl
-```
-
-New storefronts use that configured value. For one generated project only, pass
-an override:
-
-```bash
-npm create carto@latest -- my-storefront --api-base-url https://api.carto.build
-```
+The command uses browser/device authorization, writes the Commerce API URL and
+Server App token only to the ignored local `.env`, and verifies the Commerce
+API connection. Carto Private must implement the device authorization contract
+in [docs/carto-private-connect-contract.md](docs/carto-private-connect-contract.md).
 
 ## Publishing
 
 See [docs/npm-release.md](docs/npm-release.md) for the npm release checklist,
-including version bumps, dry runs, publishing order, OTP handling, and
+including version bumps, dry runs, OTP handling, and
 post-publish verification.
