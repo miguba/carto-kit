@@ -1,8 +1,7 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, resolve, sep } from "node:path";
+import { dirname, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runConnect } from "./connect.js";
 import { inspectFrontsiteProject } from "./project.js";
@@ -56,7 +55,12 @@ export async function runDeploy(directory: string, dependencies: DeployDependenc
   try {
     console.log(`Deploying ${workerName} to Cloudflare Workers...`);
     console.log("1/4 Building storefront with the Cloudflare adapter");
-    await runProjectCommand(project.root, "astro", ["build", "--config", deploymentFiles.astroConfigPath], env);
+    await runProjectCommand(
+      project.root,
+      "astro",
+      ["build", "--config", relative(project.root, deploymentFiles.astroConfigPath)],
+      env
+    );
     console.log("2/4 Validating Worker package");
     await runWrangler(project.root, wranglerPath, ["deploy", "--dry-run", "--config", deploymentFiles.wranglerConfigPath], env);
     console.log("3/4 Syncing runtime secrets");
@@ -194,7 +198,7 @@ async function createDeploymentFiles(
   cloudflareAdapterPath: string,
   cloudflareEntrypointPath: string
 ): Promise<{ tempDir: string; astroConfigPath: string; wranglerConfigPath: string }> {
-  const tempDir = await mkdtemp(resolve(tmpdir(), "carto-cloudflare-deploy-"));
+  const tempDir = await mkdtemp(resolve(root, ".carto-cloudflare-deploy-"));
   const astroConfigPath = resolve(tempDir, "astro.config.mjs");
   const wranglerConfigPath = resolve(tempDir, "wrangler.jsonc");
   const originalConfigUrl = pathToFileURL(resolve(root, "astro.config.mjs")).href;

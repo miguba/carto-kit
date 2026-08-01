@@ -39,7 +39,9 @@ async function installCapturingAstro(root: string): Promise<void> {
 const fs = require("node:fs");
 const path = require("node:path");
 const index = process.argv.indexOf("--config");
-fs.copyFileSync(process.argv[index + 1], path.join(process.cwd(), "captured-astro-config.mjs"));
+const configPath = process.argv[index + 1];
+if (path.isAbsolute(configPath)) process.exit(2);
+fs.copyFileSync(path.join(process.cwd(), configPath), path.join(process.cwd(), "captured-astro-config.mjs"));
 fs.mkdirSync(path.join(process.cwd(), "dist"), { recursive: true });
 `);
   await chmod(path, 0o755);
