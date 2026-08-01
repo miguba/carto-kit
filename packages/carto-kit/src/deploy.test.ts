@@ -27,12 +27,34 @@ async function installFakeProjectCommands(root: string): Promise<void> {
   }
 }
 
-test("deploy requires the Carto commerce token before authentication", async () => {
+test("deploy requires an interactive Carto connection when the token is missing", async () => {
   const root = await frontsiteFixture();
   const previous = process.env.COMMERCE_API_TOKEN;
   delete process.env.COMMERCE_API_TOKEN;
-  try { await assert.rejects(runDeploy(root), /COMMERCE_API_TOKEN/); }
+  try { await assert.rejects(runDeploy(root, { interactive: false }), /Carto connection is required/); }
   finally {
+    if (previous === undefined) delete process.env.COMMERCE_API_TOKEN;
+    else process.env.COMMERCE_API_TOKEN = previous;
+  }
+});
+
+test("deploy reuses connect and reloads the resulting Carto token", async () => {
+  const root = await frontsiteFixture();
+  const previous = process.env.COMMERCE_API_TOKEN;
+  delete process.env.COMMERCE_API_TOKEN;
+  let connected = false;
+  try {
+    await assert.rejects(runDeploy(root, {
+      interactive: true,
+      connect: async (options) => {
+        connected = true;
+        assert.equal(options.projectDir, root);
+        await writeFile(join(root, ".env"), "PUBLIC_COMMERCE_API_BASE_URL=https://carto.example.com\nCOMMERCE_API_TOKEN=connected-token\n");
+      }
+    }), /Missing astro/);
+    assert.equal(connected, true);
+    assert.equal(process.env.COMMERCE_API_TOKEN, "connected-token");
+  } finally {
     if (previous === undefined) delete process.env.COMMERCE_API_TOKEN;
     else process.env.COMMERCE_API_TOKEN = previous;
   }

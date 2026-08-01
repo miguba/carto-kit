@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { access, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { runConnect } from "./connect.js";
 import { inspectFrontsiteProject } from "./project.js";
 
 const SCHEMA_VERSION = 1;
@@ -14,13 +15,22 @@ interface DeployConfig {
   };
 }
 
-export async function runDeploy(directory: string): Promise<void> {
+interface DeployDependencies {
+  connect?: typeof runConnect;
+  interactive?: boolean;
+}
+
+export async function runDeploy(directory: string, dependencies: DeployDependencies = {}): Promise<void> {
   const project = await inspectFrontsiteProject(directory);
   await loadEnvironment(project.root);
   const config = await readDeployConfig(project.root);
   const workerName = normalizeWorkerName(config.deployment.workerName || process.env.APP_NAME || project.packageName);
 
-  const commerceToken = requiredEnv("COMMERCE_API_TOKEN");
+  const commerceToken = await ensureCartoConnection(
+    project.root,
+    dependencies.connect ?? runConnect,
+    dependencies.interactive ?? Boolean(process.stdin.isTTY && !process.env.CI)
+  );
   await requireProjectCommand(project.root, "astro");
   await requireProjectCommand(project.root, "wrangler");
 
@@ -52,12 +62,35 @@ Usage:
   carto deploy [project-directory]
 
 Authentication:
+  If the project is not connected to Carto, deploy starts browser authorization.
   Local deployments use Cloudflare browser authorization through Wrangler.
   CI deployments use CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN.
 
-Required project secret:
+CI requirements:
   COMMERCE_API_TOKEN
+  CLOUDFLARE_ACCOUNT_ID
+  CLOUDFLARE_API_TOKEN
 `);
+}
+
+async function ensureCartoConnection(
+  root: string,
+  connect: typeof runConnect,
+  interactive: boolean
+): Promise<string> {
+  const existingToken = process.env.COMMERCE_API_TOKEN?.trim();
+  if (existingToken) return existingToken;
+  if (!interactive) {
+    throw new Error(
+      "Carto connection is required. Run this command in an interactive terminal to connect in your browser, " +
+      "or configure COMMERCE_API_TOKEN for CI."
+    );
+  }
+
+  console.log("This Frontsite is not connected to Carto. Starting authorization...");
+  await connect({ command: "connect", projectDir: root, openBrowser: true, yes: false });
+  await loadEnvironment(root, new Set(["PUBLIC_COMMERCE_API_BASE_URL", "COMMERCE_API_TOKEN"]));
+  return requiredEnv("COMMERCE_API_TOKEN");
 }
 
 async function ensureCloudflareAuthentication(root: string, env: NodeJS.ProcessEnv): Promise<void> {
@@ -108,7 +141,7 @@ async function readDeployConfig(root: string): Promise<DeployConfig> {
   }
 }
 
-async function loadEnvironment(root: string): Promise<void> {
+async function loadEnvironment(root: string, overwrite: ReadonlySet<string> = new Set()): Promise<void> {
   const inherited = new Set(Object.keys(process.env));
   for (const filename of [".env", ".env.production"]) {
     let contents: string;
@@ -118,7 +151,7 @@ async function loadEnvironment(root: string): Promise<void> {
       const line = rawLine.trim();
       if (!line || line.startsWith("#")) continue;
       const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
-      if (!match || inherited.has(match[1])) continue;
+      if (!match || (inherited.has(match[1]) && !overwrite.has(match[1]))) continue;
       process.env[match[1]] = parseEnvValue(match[2]);
     }
   }
