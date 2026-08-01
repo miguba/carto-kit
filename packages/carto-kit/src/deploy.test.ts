@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chmod, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { runDeploy } from "./deploy.js";
 
 async function frontsiteFixture(): Promise<string> {
@@ -41,8 +42,11 @@ const path = require("node:path");
 const index = process.argv.indexOf("--config");
 const configPath = process.argv[index + 1];
 if (path.isAbsolute(configPath)) process.exit(2);
-fs.copyFileSync(path.join(process.cwd(), configPath), path.join(process.cwd(), "captured-astro-config.mjs"));
-fs.mkdirSync(path.join(process.cwd(), "dist"), { recursive: true });
+const astroConfig = fs.readFileSync(path.join(process.cwd(), configPath), "utf8");
+fs.writeFileSync(path.join(process.cwd(), "captured-astro-config.mjs"), astroConfig);
+const wranglerConfigPath = JSON.parse(astroConfig.match(/configPath: ("[^"]+")/)[1]);
+fs.mkdirSync(path.join(process.cwd(), "dist", "server"), { recursive: true });
+fs.copyFileSync(wranglerConfigPath, path.join(process.cwd(), "dist", "server", "wrangler.json"));
 `);
   await chmod(path, 0o755);
 }
@@ -54,6 +58,18 @@ const fs = require("node:fs");
 const path = require("node:path");
 const index = process.argv.indexOf("--config");
 if (index >= 0) fs.copyFileSync(process.argv[index + 1], path.join(process.cwd(), "captured-wrangler.jsonc"));
+if (process.argv.includes("bulk")) {
+  process.stdin.resume();
+  process.stdin.on("end", () => process.exit(0));
+} else process.exit(0);
+`);
+  return path;
+}
+
+async function noOpWrangler(): Promise<string> {
+  const root = await mkdtemp(join(tmpdir(), "carto-wrangler-test-"));
+  const path = join(root, "wrangler.cjs");
+  await writeFile(path, `
 if (process.argv.includes("bulk")) {
   process.stdin.resume();
   process.stdin.on("end", () => process.exit(0));
@@ -123,7 +139,7 @@ test("deploy requests browser authorization instead of requiring API credentials
   }
 });
 
-test("deploy builds with temporary bundled Cloudflare configuration", async () => {
+test("deploy builds with temporary Cloudflare configuration", async () => {
   const root = await frontsiteFixture();
   await installCapturingAstro(root);
   const wranglerPath = await successfulWrangler(root);
@@ -141,11 +157,34 @@ test("deploy builds with temporary bundled Cloudflare configuration", async () =
       cloudflareEntrypointPath: "/bundled/cloudflare-server.js"
     });
     const astroConfig = await readFile(join(root, "captured-astro-config.mjs"), "utf8");
-    assert.match(astroConfig, /adapter: cloudflare\(\)/);
+    assert.match(astroConfig, /adapter: cloudflare\(\{ configPath: .*wrangler\.jsonc.*, imageService: 'passthrough', prerenderEnvironment: 'node' \}\)/);
     assert.match(astroConfig, /astro\.config\.mjs/);
+    assert.match(astroConfig, new RegExp(`root: ${JSON.stringify(root).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    assert.doesNotMatch(astroConfig, /root: new URL/);
     const wranglerConfig = JSON.parse(await readFile(join(root, "captured-wrangler.jsonc"), "utf8"));
     assert.equal(wranglerConfig.main, "/bundled/cloudflare-server.js");
     assert.equal(wranglerConfig.assets.directory, join(root, "dist"));
+    assert.equal(wranglerConfig.compatibility_date, "2025-04-01");
+    assert.deepEqual(wranglerConfig.kv_namespaces, [{ binding: "SESSION" }]);
+  } finally {
+    if (previousToken === undefined) delete process.env.COMMERCE_API_TOKEN; else process.env.COMMERCE_API_TOKEN = previousToken;
+    if (previousAccount === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID; else process.env.CLOUDFLARE_ACCOUNT_ID = previousAccount;
+    if (previousApiToken === undefined) delete process.env.CLOUDFLARE_API_TOKEN; else process.env.CLOUDFLARE_API_TOKEN = previousApiToken;
+  }
+});
+
+test("deploy builds the Astro 6 Frontsite template with its matching adapter", async () => {
+  const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+  const root = join(repositoryRoot, "templates", "single-product");
+  const wranglerPath = await noOpWrangler();
+  const previousToken = process.env.COMMERCE_API_TOKEN;
+  const previousAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const previousApiToken = process.env.CLOUDFLARE_API_TOKEN;
+  process.env.COMMERCE_API_TOKEN = "test-token";
+  delete process.env.CLOUDFLARE_ACCOUNT_ID;
+  delete process.env.CLOUDFLARE_API_TOKEN;
+  try {
+    await runDeploy(root, { wranglerPath });
   } finally {
     if (previousToken === undefined) delete process.env.COMMERCE_API_TOKEN; else process.env.COMMERCE_API_TOKEN = previousToken;
     if (previousAccount === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID; else process.env.CLOUDFLARE_ACCOUNT_ID = previousAccount;

@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, relative, resolve, sep } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runConnect } from "./connect.js";
 import { inspectFrontsiteProject } from "./project.js";
@@ -9,8 +9,6 @@ import { inspectFrontsiteProject } from "./project.js";
 const SCHEMA_VERSION = 1;
 const require = createRequire(import.meta.url);
 const BUNDLED_WRANGLER_PATH = resolve(dirname(require.resolve("wrangler/package.json")), "bin", "wrangler.js");
-const BUNDLED_CLOUDFLARE_ADAPTER_PATH = require.resolve("@astrojs/cloudflare");
-const BUNDLED_CLOUDFLARE_ENTRYPOINT_PATH = require.resolve("@astrojs/cloudflare/entrypoints/server");
 
 interface DeployConfig {
   schemaVersion: number;
@@ -45,12 +43,18 @@ export async function runDeploy(directory: string, dependencies: DeployDependenc
   const env = { ...process.env, NODE_ENV: "production", DEPLOYMENT_TARGET: "cloudflare-workers" };
   const wranglerPath = dependencies.wranglerPath ?? BUNDLED_WRANGLER_PATH;
   await ensureCloudflareAuthentication(project.root, wranglerPath, env);
+  const cloudflare = dependencies.cloudflareAdapterPath && dependencies.cloudflareEntrypointPath
+    ? {
+        adapterPath: dependencies.cloudflareAdapterPath,
+        entrypointPath: dependencies.cloudflareEntrypointPath
+      }
+    : await ensureCloudflareAdapter(project.root, env);
   const deploymentFiles = await createDeploymentFiles(
     project.root,
     config,
     workerName,
-    dependencies.cloudflareAdapterPath ?? BUNDLED_CLOUDFLARE_ADAPTER_PATH,
-    dependencies.cloudflareEntrypointPath ?? BUNDLED_CLOUDFLARE_ENTRYPOINT_PATH
+    cloudflare.adapterPath,
+    cloudflare.entrypointPath
   );
   try {
     console.log(`Deploying ${workerName} to Cloudflare Workers...`);
@@ -62,17 +66,17 @@ export async function runDeploy(directory: string, dependencies: DeployDependenc
       env
     );
     console.log("2/4 Validating Worker package");
-    await runWrangler(project.root, wranglerPath, ["deploy", "--dry-run", "--config", deploymentFiles.wranglerConfigPath], env);
+    await runWrangler(project.root, wranglerPath, ["deploy", "--dry-run", "--config", deploymentFiles.builtWranglerConfigPath], env);
     console.log("3/4 Syncing runtime secrets");
     await runWrangler(
       project.root,
       wranglerPath,
-      ["secret", "bulk", "--config", deploymentFiles.wranglerConfigPath],
+      ["secret", "bulk", "--config", deploymentFiles.builtWranglerConfigPath],
       env,
       `${JSON.stringify({ COMMERCE_API_TOKEN: commerceToken })}\n`
     );
     console.log("4/4 Publishing Worker");
-    await runWrangler(project.root, wranglerPath, ["deploy", "--config", deploymentFiles.wranglerConfigPath], env);
+    await runWrangler(project.root, wranglerPath, ["deploy", "--config", deploymentFiles.builtWranglerConfigPath], env);
     console.log("Cloudflare deployment completed.");
   } finally {
     await rm(deploymentFiles.tempDir, { recursive: true, force: true });
@@ -167,6 +171,62 @@ async function readDeployConfig(root: string): Promise<DeployConfig> {
   }
 }
 
+async function ensureCloudflareAdapter(
+  root: string,
+  env: NodeJS.ProcessEnv
+): Promise<{ adapterPath: string; entrypointPath: string }> {
+  const astroVersion = await readInstalledPackageVersion(root, "astro");
+  if (!astroVersion) throw new Error("Missing astro. Install the Frontsite project dependencies first.");
+  const astroMajor = Number.parseInt(astroVersion.split(".")[0], 10);
+  const compatibleAdapter = astroMajor === 6 ? { major: 13, version: "^13.7.0" }
+    : astroMajor === 7 ? { major: 14, version: "^14.1.7" }
+    : undefined;
+  if (!compatibleAdapter) {
+    throw new Error(`Unsupported Astro version ${astroVersion}. Carto deploy currently supports Astro 6 and 7.`);
+  }
+
+  let adapterVersion = await readInstalledPackageVersion(root, "@astrojs/cloudflare", false);
+  if (!adapterVersion || Number.parseInt(adapterVersion.split(".")[0], 10) !== compatibleAdapter.major) {
+    console.log(`Preparing @astrojs/cloudflare for Astro ${astroMajor}...`);
+    await runCommand(root, npmCommand(), [
+      "install",
+      "--save-dev",
+      "--no-audit",
+      "--no-fund",
+      `@astrojs/cloudflare@${compatibleAdapter.version}`
+    ], env);
+    adapterVersion = await readInstalledPackageVersion(root, "@astrojs/cloudflare", false);
+    if (!adapterVersion) {
+      await runCommand(root, npmCommand(), ["install", "--no-audit", "--no-fund"], env);
+      adapterVersion = await readInstalledPackageVersion(root, "@astrojs/cloudflare", false);
+    }
+  }
+  if (!adapterVersion || Number.parseInt(adapterVersion.split(".")[0], 10) !== compatibleAdapter.major) {
+    throw new Error(`Unable to prepare a Cloudflare adapter compatible with Astro ${astroVersion}.`);
+  }
+
+  const projectRequire = createRequire(resolve(root, "package.json"));
+  return {
+    adapterPath: projectRequire.resolve("@astrojs/cloudflare"),
+    entrypointPath: projectRequire.resolve("@astrojs/cloudflare/entrypoints/server")
+  };
+}
+
+async function readInstalledPackageVersion(root: string, name: string, required = true): Promise<string | undefined> {
+  try {
+    const contents = await readFile(resolve(root, "node_modules", ...name.split("/"), "package.json"), "utf8");
+    const version = (JSON.parse(contents) as { version?: unknown }).version;
+    if (typeof version !== "string" || !version) throw new Error(`Invalid installed package metadata for ${name}.`);
+    return version;
+  } catch (error) {
+    if (!required && (error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new Error(`Missing ${name}. Install the Frontsite project dependencies first.`);
+    }
+    throw error;
+  }
+}
+
 async function loadEnvironment(root: string, overwrite: ReadonlySet<string> = new Set()): Promise<void> {
   const inherited = new Set(Object.keys(process.env));
   for (const filename of [".env", ".env.production"]) {
@@ -197,13 +257,12 @@ async function createDeploymentFiles(
   workerName: string,
   cloudflareAdapterPath: string,
   cloudflareEntrypointPath: string
-): Promise<{ tempDir: string; astroConfigPath: string; wranglerConfigPath: string }> {
+): Promise<{ tempDir: string; astroConfigPath: string; wranglerConfigPath: string; builtWranglerConfigPath: string }> {
   const tempDir = await mkdtemp(resolve(root, ".carto-cloudflare-deploy-"));
   const astroConfigPath = resolve(tempDir, "astro.config.mjs");
   const wranglerConfigPath = resolve(tempDir, "wrangler.jsonc");
   const originalConfigUrl = pathToFileURL(resolve(root, "astro.config.mjs")).href;
   const adapterUrl = pathToFileURL(cloudflareAdapterPath).href;
-  const rootUrl = pathToFileURL(root.endsWith(sep) ? root : `${root}${sep}`).href;
   await writeFile(astroConfigPath, [
     `import cloudflare from ${JSON.stringify(adapterUrl)};`,
     `import originalConfig from ${JSON.stringify(originalConfigUrl)};`,
@@ -212,9 +271,9 @@ async function createDeploymentFiles(
     "  : await originalConfig;",
     "export default {",
     "  ...base,",
-    `  root: new URL(${JSON.stringify(rootUrl)}),`,
+    `  root: ${JSON.stringify(root)},`,
     "  output: 'server',",
-    "  adapter: cloudflare(),",
+    `  adapter: cloudflare({ configPath: ${JSON.stringify(wranglerConfigPath)}, imageService: 'passthrough', prerenderEnvironment: 'node' }),`,
     "};",
     ""
   ].join("\n"));
@@ -222,17 +281,27 @@ async function createDeploymentFiles(
   const wrangler: Record<string, unknown> = {
     name: workerName,
     main: cloudflareEntrypointPath,
-    compatibility_date: config.deployment.compatibilityDate || "2026-08-01",
+    compatibility_date: config.deployment.compatibilityDate || "2025-04-01",
     compatibility_flags: ["nodejs_compat"],
     assets: { binding: "ASSETS", directory: resolve(root, "dist") },
     observability: { enabled: true }
   };
   if (process.env.PAGE_CACHE_PREFIX) wrangler.vars = { PAGE_CACHE_PREFIX: process.env.PAGE_CACHE_PREFIX };
   if (process.env.CLOUDFLARE_KV_NAMESPACE_ID) {
-    wrangler.kv_namespaces = [{ binding: "KV_STORE", id: process.env.CLOUDFLARE_KV_NAMESPACE_ID }];
+    wrangler.kv_namespaces = [
+      { binding: "SESSION" },
+      { binding: "KV_STORE", id: process.env.CLOUDFLARE_KV_NAMESPACE_ID }
+    ];
+  } else {
+    wrangler.kv_namespaces = [{ binding: "SESSION" }];
   }
   await writeFile(wranglerConfigPath, `${JSON.stringify(wrangler, null, 2)}\n`);
-  return { tempDir, astroConfigPath, wranglerConfigPath };
+  return {
+    tempDir,
+    astroConfigPath,
+    wranglerConfigPath,
+    builtWranglerConfigPath: resolve(root, "dist", "server", "wrangler.json")
+  };
 }
 
 function requiredEnv(name: string): string {
@@ -257,8 +326,23 @@ function commandPath(root: string, command: string): string {
 }
 
 async function runProjectCommand(root: string, command: string, args: string[], env: NodeJS.ProcessEnv, stdin?: string): Promise<void> {
+  await runCommand(root, commandPath(root, command), args, env, stdin, command);
+}
+
+function npmCommand(): string {
+  return process.platform === "win32" ? "npm.cmd" : "npm";
+}
+
+async function runCommand(
+  root: string,
+  executable: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  stdin?: string,
+  displayName = executable
+): Promise<void> {
   await new Promise<void>((done, reject) => {
-    const child = spawn(commandPath(root, command), args, {
+    const child = spawn(executable, args, {
       cwd: root,
       env,
       stdio: [stdin === undefined ? "inherit" : "pipe", "inherit", "inherit"],
@@ -267,7 +351,7 @@ async function runProjectCommand(root: string, command: string, args: string[], 
     child.once("error", reject);
     child.once("exit", (code, signal) => {
       if (code === 0) done();
-      else reject(new Error(`${command} ${args.join(" ")} failed${signal ? ` with signal ${signal}` : ` with exit code ${code}`}.`));
+      else reject(new Error(`${displayName} ${args.join(" ")} failed${signal ? ` with signal ${signal}` : ` with exit code ${code}`}.`));
     });
     if (stdin !== undefined) child.stdin?.end(stdin);
   });
