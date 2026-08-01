@@ -304,11 +304,30 @@ test("deploy rejects Cloudflare reauthentication outside an interactive terminal
   );
 });
 
+test("deploy rejects custom domain reconfiguration outside an interactive terminal", async () => {
+  const root = await frontsiteFixture();
+  await installFakeAstro(root);
+  const wranglerPath = await noOpWrangler();
+  await writeFile(join(root, ".env"), "PUBLIC_COMMERCE_API_BASE_URL=https://carto.example.com\nCOMMERCE_API_TOKEN=test-token\n");
+  await writeFile(join(root, "carto.config.json"), JSON.stringify({
+    schemaVersion: 1,
+    deployment: { provider: "cloudflare-workers", customDomain: null }
+  }));
+  await assert.rejects(
+    runDeploy(root, { interactive: false, reconfigureDomain: true, wranglerPath }),
+    /domain reconfiguration requires an interactive terminal/
+  );
+});
+
 test("deploy builds with temporary Cloudflare configuration", async () => {
   const root = await frontsiteFixture();
   await installCapturingAstro(root);
   const wranglerPath = await successfulWrangler(root);
   await writeFile(join(root, ".env"), "PUBLIC_COMMERCE_API_BASE_URL=https://carto.example.com\nCOMMERCE_API_TOKEN=test-token\n");
+  await writeFile(join(root, "carto.config.json"), JSON.stringify({
+    schemaVersion: 1,
+    deployment: { provider: "cloudflare-workers", customDomain: null }
+  }));
   const previousToken = process.env.COMMERCE_API_TOKEN;
   const previousBaseUrl = process.env.PUBLIC_COMMERCE_API_BASE_URL;
   const previousAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -323,6 +342,7 @@ test("deploy builds with temporary Cloudflare configuration", async () => {
       wranglerPath,
       cloudflareAdapterPath: "/bundled/cloudflare-adapter.js",
       cloudflareEntrypointPath: "/bundled/cloudflare-server.js",
+      reconfigureDomain: true,
       confirmCustomDomain: async () => true,
       inputCustomDomain: async () => "Shop.Example.com"
     });

@@ -14,9 +14,20 @@ test("routes removed create syntax to the rejecting command handler", () => {
 });
 
 test("parses deploy with an optional project directory", () => {
-  assert.deepEqual(parseCommand(["deploy"]), { command: "deploy", projectDir: ".", reauth: false });
-  assert.deepEqual(parseCommand(["deploy", "store"]), { command: "deploy", projectDir: "store", reauth: false });
-  assert.deepEqual(parseCommand(["deploy", "--reauth"]), { command: "deploy", projectDir: ".", reauth: true });
-  assert.deepEqual(parseCommand(["deploy", "--help"]), { command: "deploy", projectDir: "__HELP__", reauth: false });
+  assert.deepEqual(parseCommand(["deploy"]), {
+    command: "deploy", projectDir: ".", reauth: false, reconfigureDomain: false
+  });
+  assert.deepEqual(parseCommand(["deploy", "store"]), {
+    command: "deploy", projectDir: "store", reauth: false, reconfigureDomain: false
+  });
+  assert.deepEqual(parseCommand(["deploy", "--reauth"]), {
+    command: "deploy", projectDir: ".", reauth: true, reconfigureDomain: false
+  });
+  assert.deepEqual(parseCommand(["deploy", "--reconfigure-domain"]), {
+    command: "deploy", projectDir: ".", reauth: false, reconfigureDomain: true
+  });
+  assert.deepEqual(parseCommand(["deploy", "--help"]), {
+    command: "deploy", projectDir: "__HELP__", reauth: false, reconfigureDomain: false
+  });
   assert.throws(() => parseCommand(["deploy", "one", "two"]), /at most one/);
 });

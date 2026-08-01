@@ -31,6 +31,7 @@ interface DeployDependencies {
   inputCustomDomain?: () => Promise<string>;
   selectCloudflareAccount?: (accounts: CloudflareAccount[]) => Promise<string>;
   reauth?: boolean;
+  reconfigureDomain?: boolean;
 }
 
 interface CloudflareAccount {
@@ -118,10 +119,11 @@ export function printDeployHelp(): void {
 Deploy a Carto Frontsite project to Cloudflare Workers.
 
 Usage:
-  carto deploy [project-directory] [--reauth]
+  carto deploy [project-directory] [--reauth] [--reconfigure-domain]
 
 Options:
-  --reauth  Clear the saved Cloudflare login and authorize again before deploying.
+  --reauth             Clear the saved Cloudflare login and authorize again before deploying.
+  --reconfigure-domain Ask again whether to bind a Cloudflare-managed custom domain.
 
 Authentication:
   If the project is not connected to Carto, deploy starts browser authorization.
@@ -289,6 +291,12 @@ async function selectCustomDomain(
   interactive: boolean,
   dependencies: DeployDependencies
 ): Promise<boolean> {
+  if (dependencies.reconfigureDomain) {
+    if (!interactive) {
+      throw new Error("Custom domain reconfiguration requires an interactive terminal.");
+    }
+    delete config.deployment.customDomain;
+  }
   if (!interactive || config.deployment.customDomain !== undefined) return false;
   const approved = dependencies.confirmCustomDomain
     ? await dependencies.confirmCustomDomain()

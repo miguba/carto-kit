@@ -27,7 +27,10 @@ async function main(): Promise<void> {
   if (command.command === "legacy") return runLegacy(command.args);
   if (command.command === "deploy") {
     if (command.projectDir === "__HELP__") return printDeployHelp();
-    return runDeploy(command.projectDir, { reauth: command.reauth });
+    return runDeploy(command.projectDir, {
+      reauth: command.reauth,
+      reconfigureDomain: command.reconfigureDomain
+    });
   }
   if (command.projectDir === "__HELP__") return printConnectHelp();
   await runConnect(command);
