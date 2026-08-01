@@ -119,21 +119,36 @@ test("deploy rejects incompatible project configuration", async () => {
   await assert.rejects(runDeploy(root), /schemaVersion 2/);
 });
 
+test("deploy rejects unsafe custom domain values", async () => {
+  const root = await frontsiteFixture();
+  await writeFile(join(root, "carto.config.json"), JSON.stringify({
+    schemaVersion: 1,
+    deployment: {
+      provider: "cloudflare-workers",
+      customDomain: "https://shop.example.com/path"
+    }
+  }));
+  await assert.rejects(runDeploy(root), /without a protocol, path, port, or wildcard/);
+});
+
 test("deploy requests browser authorization instead of requiring API credentials locally", async () => {
   const root = await frontsiteFixture();
   await installFakeAstro(root);
   const wranglerPath = await fakeWrangler(root);
-  await writeFile(join(root, ".env"), "COMMERCE_API_TOKEN=test-token\n");
+  await writeFile(join(root, ".env"), "PUBLIC_COMMERCE_API_BASE_URL=https://carto.example.com\nCOMMERCE_API_TOKEN=test-token\n");
   const previousCi = process.env.CI;
+  const previousBaseUrl = process.env.PUBLIC_COMMERCE_API_BASE_URL;
   const previousAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
   const previousToken = process.env.CLOUDFLARE_API_TOKEN;
   process.env.CI = "true";
+  delete process.env.PUBLIC_COMMERCE_API_BASE_URL;
   delete process.env.CLOUDFLARE_ACCOUNT_ID;
   delete process.env.CLOUDFLARE_API_TOKEN;
   try {
     await assert.rejects(runDeploy(root, { wranglerPath }), /interactive terminal to authorize in your browser/);
   } finally {
     if (previousCi === undefined) delete process.env.CI; else process.env.CI = previousCi;
+    if (previousBaseUrl === undefined) delete process.env.PUBLIC_COMMERCE_API_BASE_URL; else process.env.PUBLIC_COMMERCE_API_BASE_URL = previousBaseUrl;
     if (previousAccount === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID; else process.env.CLOUDFLARE_ACCOUNT_ID = previousAccount;
     if (previousToken === undefined) delete process.env.CLOUDFLARE_API_TOKEN; else process.env.CLOUDFLARE_API_TOKEN = previousToken;
   }
@@ -143,18 +158,23 @@ test("deploy builds with temporary Cloudflare configuration", async () => {
   const root = await frontsiteFixture();
   await installCapturingAstro(root);
   const wranglerPath = await successfulWrangler(root);
-  await writeFile(join(root, ".env"), "COMMERCE_API_TOKEN=test-token\n");
+  await writeFile(join(root, ".env"), "PUBLIC_COMMERCE_API_BASE_URL=https://carto.example.com\nCOMMERCE_API_TOKEN=test-token\n");
   const previousToken = process.env.COMMERCE_API_TOKEN;
+  const previousBaseUrl = process.env.PUBLIC_COMMERCE_API_BASE_URL;
   const previousAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
   const previousApiToken = process.env.CLOUDFLARE_API_TOKEN;
   delete process.env.COMMERCE_API_TOKEN;
+  delete process.env.PUBLIC_COMMERCE_API_BASE_URL;
   delete process.env.CLOUDFLARE_ACCOUNT_ID;
   delete process.env.CLOUDFLARE_API_TOKEN;
   try {
     await runDeploy(root, {
+      interactive: true,
       wranglerPath,
       cloudflareAdapterPath: "/bundled/cloudflare-adapter.js",
-      cloudflareEntrypointPath: "/bundled/cloudflare-server.js"
+      cloudflareEntrypointPath: "/bundled/cloudflare-server.js",
+      confirmCustomDomain: async () => true,
+      inputCustomDomain: async () => "Shop.Example.com"
     });
     const astroConfig = await readFile(join(root, "captured-astro-config.mjs"), "utf8");
     assert.match(astroConfig, /adapter: cloudflare\(\{ configPath: .*wrangler\.jsonc.*, imageService: 'passthrough', prerenderEnvironment: 'node' \}\)/);
@@ -165,9 +185,20 @@ test("deploy builds with temporary Cloudflare configuration", async () => {
     assert.equal(wranglerConfig.main, "/bundled/cloudflare-server.js");
     assert.equal(wranglerConfig.assets.directory, join(root, "dist"));
     assert.equal(wranglerConfig.compatibility_date, "2025-04-01");
+    assert.equal(wranglerConfig.workers_dev, true);
+    assert.equal(wranglerConfig.preview_urls, true);
+    assert.deepEqual(wranglerConfig.vars, {
+      PUBLIC_COMMERCE_API_BASE_URL: "https://carto.example.com"
+    });
     assert.deepEqual(wranglerConfig.kv_namespaces, [{ binding: "SESSION" }]);
+    assert.deepEqual(wranglerConfig.routes, [
+      { pattern: "shop.example.com", custom_domain: true }
+    ]);
+    const savedConfig = JSON.parse(await readFile(join(root, "carto.config.json"), "utf8"));
+    assert.equal(savedConfig.deployment.customDomain, "shop.example.com");
   } finally {
     if (previousToken === undefined) delete process.env.COMMERCE_API_TOKEN; else process.env.COMMERCE_API_TOKEN = previousToken;
+    if (previousBaseUrl === undefined) delete process.env.PUBLIC_COMMERCE_API_BASE_URL; else process.env.PUBLIC_COMMERCE_API_BASE_URL = previousBaseUrl;
     if (previousAccount === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID; else process.env.CLOUDFLARE_ACCOUNT_ID = previousAccount;
     if (previousApiToken === undefined) delete process.env.CLOUDFLARE_API_TOKEN; else process.env.CLOUDFLARE_API_TOKEN = previousApiToken;
   }
@@ -178,15 +209,18 @@ test("deploy builds the Astro 6 Frontsite template with its matching adapter", a
   const root = join(repositoryRoot, "templates", "single-product");
   const wranglerPath = await noOpWrangler();
   const previousToken = process.env.COMMERCE_API_TOKEN;
+  const previousBaseUrl = process.env.PUBLIC_COMMERCE_API_BASE_URL;
   const previousAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
   const previousApiToken = process.env.CLOUDFLARE_API_TOKEN;
   process.env.COMMERCE_API_TOKEN = "test-token";
+  process.env.PUBLIC_COMMERCE_API_BASE_URL = "https://carto.example.com";
   delete process.env.CLOUDFLARE_ACCOUNT_ID;
   delete process.env.CLOUDFLARE_API_TOKEN;
   try {
     await runDeploy(root, { wranglerPath });
   } finally {
     if (previousToken === undefined) delete process.env.COMMERCE_API_TOKEN; else process.env.COMMERCE_API_TOKEN = previousToken;
+    if (previousBaseUrl === undefined) delete process.env.PUBLIC_COMMERCE_API_BASE_URL; else process.env.PUBLIC_COMMERCE_API_BASE_URL = previousBaseUrl;
     if (previousAccount === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID; else process.env.CLOUDFLARE_ACCOUNT_ID = previousAccount;
     if (previousApiToken === undefined) delete process.env.CLOUDFLARE_API_TOKEN; else process.env.CLOUDFLARE_API_TOKEN = previousApiToken;
   }

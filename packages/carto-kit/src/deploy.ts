@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { confirm, input } from "@inquirer/prompts";
 import { runConnect } from "./connect.js";
 import { inspectFrontsiteProject } from "./project.js";
 
@@ -16,6 +17,7 @@ interface DeployConfig {
     provider: "cloudflare-workers";
     workerName?: string;
     compatibilityDate?: string;
+    customDomain?: string | null;
   };
 }
 
@@ -25,24 +27,29 @@ interface DeployDependencies {
   wranglerPath?: string;
   cloudflareAdapterPath?: string;
   cloudflareEntrypointPath?: string;
+  confirmCustomDomain?: () => Promise<boolean>;
+  inputCustomDomain?: () => Promise<string>;
 }
 
 export async function runDeploy(directory: string, dependencies: DeployDependencies = {}): Promise<void> {
   const project = await inspectFrontsiteProject(directory);
   await loadEnvironment(project.root);
   const config = await readDeployConfig(project.root);
+  const interactive = dependencies.interactive ?? Boolean(process.stdin.isTTY && !process.env.CI);
   const workerName = normalizeWorkerName(config.deployment.workerName || process.env.APP_NAME || project.packageName);
 
   const commerceToken = await ensureCartoConnection(
     project.root,
     dependencies.connect ?? runConnect,
-    dependencies.interactive ?? Boolean(process.stdin.isTTY && !process.env.CI)
+    interactive
   );
+  requiredEnv("PUBLIC_COMMERCE_API_BASE_URL");
   await requireProjectCommand(project.root, "astro");
 
   const env = { ...process.env, NODE_ENV: "production", DEPLOYMENT_TARGET: "cloudflare-workers" };
   const wranglerPath = dependencies.wranglerPath ?? BUNDLED_WRANGLER_PATH;
   await ensureCloudflareAuthentication(project.root, wranglerPath, env);
+  const persistDomainChoice = await selectCustomDomain(config, interactive, dependencies);
   const cloudflare = dependencies.cloudflareAdapterPath && dependencies.cloudflareEntrypointPath
     ? {
         adapterPath: dependencies.cloudflareAdapterPath,
@@ -77,6 +84,7 @@ export async function runDeploy(directory: string, dependencies: DeployDependenc
     );
     console.log("4/4 Publishing Worker");
     await runWrangler(project.root, wranglerPath, ["deploy", "--config", deploymentFiles.builtWranglerConfigPath], env);
+    if (persistDomainChoice) await writeDeployConfig(project.root, config);
     console.log("Cloudflare deployment completed.");
   } finally {
     await rm(deploymentFiles.tempDir, { recursive: true, force: true });
@@ -100,6 +108,10 @@ CI requirements:
   COMMERCE_API_TOKEN
   CLOUDFLARE_ACCOUNT_ID
   CLOUDFLARE_API_TOKEN
+
+Custom domains:
+  Interactive deployments can bind a Cloudflare-managed hostname.
+  The selection is saved to carto.config.json after a successful deployment.
 `);
 }
 
@@ -164,11 +176,41 @@ async function readDeployConfig(root: string): Promise<DeployConfig> {
     if (parsed.deployment?.provider !== "cloudflare-workers") {
       throw new Error(`Unsupported deployment provider "${String(parsed.deployment?.provider)}".`);
     }
+    if (parsed.deployment.customDomain !== undefined && parsed.deployment.customDomain !== null) {
+      if (typeof parsed.deployment.customDomain !== "string") {
+        throw new Error("deployment.customDomain must be a hostname or null.");
+      }
+      parsed.deployment.customDomain = normalizeCustomDomain(parsed.deployment.customDomain);
+    }
     return parsed;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     return { schemaVersion: SCHEMA_VERSION, deployment: { provider: "cloudflare-workers" } };
   }
+}
+
+async function selectCustomDomain(
+  config: DeployConfig,
+  interactive: boolean,
+  dependencies: DeployDependencies
+): Promise<boolean> {
+  if (!interactive || config.deployment.customDomain !== undefined) return false;
+  const approved = dependencies.confirmCustomDomain
+    ? await dependencies.confirmCustomDomain()
+    : await confirm({ message: "Bind a custom domain managed by Cloudflare?", default: false });
+  if (!approved) {
+    config.deployment.customDomain = null;
+    return true;
+  }
+  const value = dependencies.inputCustomDomain
+    ? await dependencies.inputCustomDomain()
+    : await input({ message: "Custom domain (for example, shop.example.com):" });
+  config.deployment.customDomain = normalizeCustomDomain(value);
+  return true;
+}
+
+async function writeDeployConfig(root: string, config: DeployConfig): Promise<void> {
+  await writeFile(resolve(root, "carto.config.json"), `${JSON.stringify(config, null, 2)}\n`);
 }
 
 async function ensureCloudflareAdapter(
@@ -283,10 +325,26 @@ async function createDeploymentFiles(
     main: cloudflareEntrypointPath,
     compatibility_date: config.deployment.compatibilityDate || "2025-04-01",
     compatibility_flags: ["nodejs_compat"],
+    workers_dev: true,
+    preview_urls: true,
     assets: { binding: "ASSETS", directory: resolve(root, "dist") },
     observability: { enabled: true }
   };
-  if (process.env.PAGE_CACHE_PREFIX) wrangler.vars = { PAGE_CACHE_PREFIX: process.env.PAGE_CACHE_PREFIX };
+  if (config.deployment.customDomain) {
+    wrangler.routes = [{ pattern: config.deployment.customDomain, custom_domain: true }];
+  }
+  const runtimeVars = Object.fromEntries(
+    [
+      "PUBLIC_COMMERCE_API_BASE_URL",
+      "PUBLIC_MAPBOX_ACCESS_TOKEN",
+      "PUBLIC_GTM_ID",
+      "PAGE_CACHE_PREFIX"
+    ].flatMap((name) => {
+      const value = process.env[name]?.trim();
+      return value ? [[name, value]] : [];
+    })
+  );
+  if (Object.keys(runtimeVars).length > 0) wrangler.vars = runtimeVars;
   if (process.env.CLOUDFLARE_KV_NAMESPACE_ID) {
     wrangler.kv_namespaces = [
       { binding: "SESSION" },
@@ -314,6 +372,24 @@ function normalizeWorkerName(value: string): string {
   const normalized = value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "").replace(/-{2,}/g, "-");
   if (!normalized) throw new Error("The Worker name must contain at least one letter or number.");
   return normalized;
+}
+
+function normalizeCustomDomain(value: string): string {
+  const candidate = value.trim().toLowerCase();
+  if (!candidate || candidate.includes("://") || /[/?#:*]/.test(candidate)) {
+    throw new Error("The custom domain must be a hostname without a protocol, path, port, or wildcard.");
+  }
+  let hostname: string;
+  try { hostname = new URL(`https://${candidate}`).hostname; }
+  catch { throw new Error("The custom domain is not a valid hostname."); }
+  if (hostname !== candidate || hostname.length > 253 || !hostname.includes(".")) {
+    throw new Error("The custom domain must be a valid domain or subdomain.");
+  }
+  const labels = hostname.split(".");
+  if (labels.some((label) => !label || label.length > 63 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label))) {
+    throw new Error("The custom domain contains an invalid DNS label.");
+  }
+  return hostname;
 }
 
 async function requireProjectCommand(root: string, command: string): Promise<void> {
