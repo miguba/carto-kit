@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { confirm, input } from "@inquirer/prompts";
+import { confirm, input, select } from "@inquirer/prompts";
 import { runConnect } from "./connect.js";
 import { inspectFrontsiteProject } from "./project.js";
 
@@ -29,7 +29,18 @@ interface DeployDependencies {
   cloudflareEntrypointPath?: string;
   confirmCustomDomain?: () => Promise<boolean>;
   inputCustomDomain?: () => Promise<string>;
+  selectCloudflareAccount?: (accounts: CloudflareAccount[]) => Promise<string>;
   reauth?: boolean;
+}
+
+interface CloudflareAccount {
+  id: string;
+  name: string;
+}
+
+interface WranglerIdentity {
+  loggedIn: boolean;
+  accounts?: CloudflareAccount[];
 }
 
 export async function runDeploy(directory: string, dependencies: DeployDependencies = {}): Promise<void> {
@@ -52,7 +63,13 @@ export async function runDeploy(directory: string, dependencies: DeployDependenc
   if (dependencies.reauth) {
     await reauthenticateCloudflare(project.root, wranglerPath, env, interactive);
   }
-  await ensureCloudflareAuthentication(project.root, wranglerPath, env);
+  await ensureCloudflareAuthentication(
+    project.root,
+    wranglerPath,
+    env,
+    interactive,
+    dependencies.selectCloudflareAccount
+  );
   const persistDomainChoice = await selectCustomDomain(config, interactive, dependencies);
   const cloudflare = dependencies.cloudflareAdapterPath && dependencies.cloudflareEntrypointPath
     ? {
@@ -136,9 +153,6 @@ async function reauthenticateCloudflare(
   await runWrangler(root, wranglerPath, ["logout"], env);
   console.log("Opening Cloudflare authorization in your browser...");
   await runWrangler(root, wranglerPath, ["login", "--use-keyring"], env);
-  if (!(await wranglerSucceeds(root, wranglerPath, ["whoami", "--json"], env))) {
-    throw new Error("Cloudflare authorization did not complete. Run the deploy command again to retry.");
-  }
 }
 
 function clearCloudflareEnvironmentCredentials(env: NodeJS.ProcessEnv): void {
@@ -176,25 +190,34 @@ async function ensureCartoConnection(
   return requiredEnv("COMMERCE_API_TOKEN");
 }
 
-async function ensureCloudflareAuthentication(root: string, wranglerPath: string, env: NodeJS.ProcessEnv): Promise<void> {
+async function ensureCloudflareAuthentication(
+  root: string,
+  wranglerPath: string,
+  env: NodeJS.ProcessEnv,
+  interactive: boolean,
+  selectAccount?: (accounts: CloudflareAccount[]) => Promise<string>
+): Promise<void> {
   const accountId = env.CLOUDFLARE_ACCOUNT_ID?.trim();
   const apiToken = env.CLOUDFLARE_API_TOKEN?.trim();
-  const hasConfiguredApiCredentials = Boolean(accountId || apiToken);
 
   if (!accountId) delete env.CLOUDFLARE_ACCOUNT_ID;
   if (!apiToken) delete env.CLOUDFLARE_API_TOKEN;
 
-  if (hasConfiguredApiCredentials && (!accountId || !apiToken)) {
-    throw new Error("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN must be configured together.");
+  if (apiToken && !accountId) {
+    throw new Error("CLOUDFLARE_ACCOUNT_ID is required when CLOUDFLARE_API_TOKEN is configured.");
   }
 
-  if (await wranglerSucceeds(root, wranglerPath, ["whoami", "--json"], env)) return;
+  let identity = await readWranglerIdentity(root, wranglerPath, env);
+  if (identity?.loggedIn) {
+    await selectCloudflareAccount(env, identity.accounts ?? [], interactive, selectAccount);
+    return;
+  }
 
-  if (hasConfiguredApiCredentials) {
+  if (apiToken) {
     throw new Error("Cloudflare API credentials are configured but authentication failed. Check the account ID and API token.");
   }
 
-  if (!process.stdin.isTTY || process.env.CI) {
+  if (!interactive) {
     throw new Error(
       "Cloudflare authentication is required. Run this command in an interactive terminal to authorize in your browser, " +
       "or configure CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN for CI."
@@ -203,9 +226,40 @@ async function ensureCloudflareAuthentication(root: string, wranglerPath: string
 
   console.log("Opening Cloudflare authorization in your browser...");
   await runWrangler(root, wranglerPath, ["login", "--use-keyring"], env);
-  if (!(await wranglerSucceeds(root, wranglerPath, ["whoami", "--json"], env))) {
+  identity = await readWranglerIdentity(root, wranglerPath, env);
+  if (!identity?.loggedIn) {
     throw new Error("Cloudflare authorization did not complete. Run the deploy command again to retry.");
   }
+  await selectCloudflareAccount(env, identity.accounts ?? [], interactive, selectAccount);
+}
+
+async function selectCloudflareAccount(
+  env: NodeJS.ProcessEnv,
+  accounts: CloudflareAccount[],
+  interactive: boolean,
+  choose?: (accounts: CloudflareAccount[]) => Promise<string>
+): Promise<void> {
+  if (env.CLOUDFLARE_ACCOUNT_ID) return;
+  if (accounts.length === 1) {
+    env.CLOUDFLARE_ACCOUNT_ID = accounts[0].id;
+    return;
+  }
+  if (accounts.length === 0) {
+    throw new Error("The authenticated Cloudflare user does not have access to an account.");
+  }
+  if (!interactive) {
+    throw new Error("Multiple Cloudflare accounts are available. Configure CLOUDFLARE_ACCOUNT_ID for this deployment.");
+  }
+  const selected = choose
+    ? await choose(accounts)
+    : await select({
+        message: "Select a Cloudflare account:",
+        choices: accounts.map((account) => ({ name: account.name, value: account.id }))
+      });
+  if (!accounts.some((account) => account.id === selected)) {
+    throw new Error("The selected Cloudflare account is not available to the authenticated user.");
+  }
+  env.CLOUDFLARE_ACCOUNT_ID = selected;
 }
 
 async function readDeployConfig(root: string): Promise<DeployConfig> {
@@ -490,14 +544,25 @@ async function runWrangler(root: string, wranglerPath: string, args: string[], e
   });
 }
 
-async function wranglerSucceeds(root: string, wranglerPath: string, args: string[], env: NodeJS.ProcessEnv): Promise<boolean> {
-  return new Promise<boolean>((done) => {
-    const child = spawn(process.execPath, [wranglerPath, ...args], {
+async function readWranglerIdentity(
+  root: string,
+  wranglerPath: string,
+  env: NodeJS.ProcessEnv
+): Promise<WranglerIdentity | undefined> {
+  return new Promise<WranglerIdentity | undefined>((done) => {
+    const child = spawn(process.execPath, [wranglerPath, "whoami", "--json"], {
       cwd: root,
       env,
-      stdio: "ignore"
+      stdio: ["ignore", "pipe", "ignore"]
     });
-    child.once("error", () => done(false));
-    child.once("exit", (code) => done(code === 0));
+    let output = "";
+    child.stdout?.setEncoding("utf8");
+    child.stdout?.on("data", (chunk: string) => { output += chunk; });
+    child.once("error", () => done(undefined));
+    child.once("exit", (code) => {
+      if (code !== 0) return done(undefined);
+      try { done(JSON.parse(output) as WranglerIdentity); }
+      catch { done(undefined); }
+    });
   });
 }

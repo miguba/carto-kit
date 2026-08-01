@@ -58,7 +58,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const index = process.argv.indexOf("--config");
 if (index >= 0) fs.copyFileSync(process.argv[index + 1], path.join(process.cwd(), "captured-wrangler.jsonc"));
-if (process.argv.includes("bulk")) {
+if (process.argv.includes("whoami")) {
+  process.stdout.write(JSON.stringify({ loggedIn: true, accounts: [{ id: "account-1", name: "Test Account" }] }));
+  process.exit(0);
+} else if (process.argv.includes("bulk")) {
   process.stdin.resume();
   process.stdin.on("end", () => process.exit(0));
 } else process.exit(0);
@@ -70,7 +73,10 @@ async function noOpWrangler(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "carto-wrangler-test-"));
   const path = join(root, "wrangler.cjs");
   await writeFile(path, `
-if (process.argv.includes("bulk")) {
+if (process.argv.includes("whoami")) {
+  process.stdout.write(JSON.stringify({ loggedIn: true, accounts: [{ id: "account-1", name: "Test Account" }] }));
+  process.exit(0);
+} else if (process.argv.includes("bulk")) {
   process.stdin.resume();
   process.stdin.on("end", () => process.exit(0));
 } else process.exit(0);
@@ -87,7 +93,13 @@ fs.appendFileSync("wrangler-calls.jsonl", JSON.stringify({
   accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
   apiToken: process.env.CLOUDFLARE_API_TOKEN
 }) + "\\n");
-if (process.argv.includes("bulk")) {
+if (process.argv.includes("whoami")) {
+  const accounts = process.env.TEST_MULTIPLE_ACCOUNTS
+    ? [{ id: "first-account", name: "First Account" }, { id: "new-account", name: "New Account" }]
+    : [{ id: "new-account", name: "New Account" }];
+  process.stdout.write(JSON.stringify({ loggedIn: true, accounts }));
+  process.exit(0);
+} else if (process.argv.includes("bulk")) {
   process.stdin.resume();
   process.stdin.on("end", () => process.exit(0));
 } else process.exit(0);
@@ -199,12 +211,86 @@ test("deploy reauthorizes Cloudflare before publishing when requested", async ()
       ["login", "--use-keyring"],
       ["whoami", "--json"]
     ]);
-    assert.ok(calls.every((call) => call.accountId === undefined && call.apiToken === undefined));
+    assert.equal(calls[0].accountId, undefined);
+    assert.equal(calls[1].accountId, undefined);
+    assert.equal(calls[2].accountId, undefined);
+    assert.ok(calls.slice(3).every((call) => call.accountId === "new-account" && call.apiToken === undefined));
   } finally {
     if (previousAccount === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID;
     else process.env.CLOUDFLARE_ACCOUNT_ID = previousAccount;
     if (previousApiToken === undefined) delete process.env.CLOUDFLARE_API_TOKEN;
     else process.env.CLOUDFLARE_API_TOKEN = previousApiToken;
+  }
+});
+
+test("deploy supports an explicit account ID with saved OAuth credentials", async () => {
+  const root = await frontsiteFixture();
+  await installCapturingAstro(root);
+  const wranglerPath = await capturingWrangler(root);
+  await writeFile(join(root, ".env"), "PUBLIC_COMMERCE_API_BASE_URL=https://carto.example.com\nCOMMERCE_API_TOKEN=test-token\n");
+  await writeFile(join(root, "carto.config.json"), JSON.stringify({
+    schemaVersion: 1,
+    deployment: { provider: "cloudflare-workers", customDomain: null }
+  }));
+  const previousAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const previousApiToken = process.env.CLOUDFLARE_API_TOKEN;
+  process.env.CLOUDFLARE_ACCOUNT_ID = "oauth-account";
+  delete process.env.CLOUDFLARE_API_TOKEN;
+  try {
+    await runDeploy(root, {
+      interactive: true,
+      wranglerPath,
+      cloudflareAdapterPath: "/bundled/cloudflare-adapter.js",
+      cloudflareEntrypointPath: "/bundled/cloudflare-server.js"
+    });
+    const calls = (await readFile(join(root, "wrangler-calls.jsonl"), "utf8"))
+      .trim().split("\n").map((line) => JSON.parse(line));
+    assert.ok(calls.every((call) => call.accountId === "oauth-account" && call.apiToken === undefined));
+  } finally {
+    if (previousAccount === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID;
+    else process.env.CLOUDFLARE_ACCOUNT_ID = previousAccount;
+    if (previousApiToken === undefined) delete process.env.CLOUDFLARE_API_TOKEN;
+    else process.env.CLOUDFLARE_API_TOKEN = previousApiToken;
+  }
+});
+
+test("deploy selects one of multiple OAuth accounts for the full deployment", async () => {
+  const root = await frontsiteFixture();
+  await installCapturingAstro(root);
+  const wranglerPath = await capturingWrangler(root);
+  await writeFile(join(root, ".env"), "PUBLIC_COMMERCE_API_BASE_URL=https://carto.example.com\nCOMMERCE_API_TOKEN=test-token\n");
+  await writeFile(join(root, "carto.config.json"), JSON.stringify({
+    schemaVersion: 1,
+    deployment: { provider: "cloudflare-workers", customDomain: null }
+  }));
+  const previousAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const previousApiToken = process.env.CLOUDFLARE_API_TOKEN;
+  const previousMultipleAccounts = process.env.TEST_MULTIPLE_ACCOUNTS;
+  delete process.env.CLOUDFLARE_ACCOUNT_ID;
+  delete process.env.CLOUDFLARE_API_TOKEN;
+  process.env.TEST_MULTIPLE_ACCOUNTS = "1";
+  try {
+    await runDeploy(root, {
+      interactive: true,
+      wranglerPath,
+      selectCloudflareAccount: async (accounts) => {
+        assert.deepEqual(accounts.map((account) => account.id), ["first-account", "new-account"]);
+        return "new-account";
+      },
+      cloudflareAdapterPath: "/bundled/cloudflare-adapter.js",
+      cloudflareEntrypointPath: "/bundled/cloudflare-server.js"
+    });
+    const calls = (await readFile(join(root, "wrangler-calls.jsonl"), "utf8"))
+      .trim().split("\n").map((line) => JSON.parse(line));
+    assert.equal(calls[0].accountId, undefined);
+    assert.ok(calls.slice(1).every((call) => call.accountId === "new-account"));
+  } finally {
+    if (previousAccount === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID;
+    else process.env.CLOUDFLARE_ACCOUNT_ID = previousAccount;
+    if (previousApiToken === undefined) delete process.env.CLOUDFLARE_API_TOKEN;
+    else process.env.CLOUDFLARE_API_TOKEN = previousApiToken;
+    if (previousMultipleAccounts === undefined) delete process.env.TEST_MULTIPLE_ACCOUNTS;
+    else process.env.TEST_MULTIPLE_ACCOUNTS = previousMultipleAccounts;
   }
 });
 
