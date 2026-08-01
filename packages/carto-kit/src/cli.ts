@@ -2,6 +2,7 @@
 import kleur from "kleur";
 import { parseCommand } from "./cli-args.js";
 import { runConnect, printConnectHelp } from "./connect.js";
+import { printDeployHelp, runDeploy } from "./deploy.js";
 import { redactSensitive } from "./security.js";
 
 function runLegacy(args: string[]): void {
@@ -17,12 +18,17 @@ function printHelp(): void {
 
 Usage:
   carto connect
+  carto deploy [project-directory]
 `);
 }
 
 async function main(): Promise<void> {
   const command = parseCommand(process.argv.slice(2));
   if (command.command === "legacy") return runLegacy(command.args);
+  if (command.command === "deploy") {
+    if (command.projectDir === "__HELP__") return printDeployHelp();
+    return runDeploy(command.projectDir);
+  }
   if (command.projectDir === "__HELP__") return printConnectHelp();
   await runConnect(command);
 }

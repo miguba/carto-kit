@@ -2,9 +2,19 @@ import { parseArgs } from "node:util";
 
 export type ParsedCommand =
   | { command: "connect"; projectDir: string; cartoUrl?: string; openBrowser: boolean; yes: boolean }
+  | { command: "deploy"; projectDir: string }
   | { command: "legacy"; args: string[] };
 
 export function parseCommand(args: string[]): ParsedCommand {
+  if (args[0] === "deploy") {
+    const parsed = parseArgs({
+      args: args.slice(1), allowPositionals: true, strict: true,
+      options: { help: { type: "boolean", short: "h" } }
+    });
+    if (parsed.values.help) return { command: "deploy", projectDir: "__HELP__" };
+    if (parsed.positionals.length > 1) throw new Error("deploy accepts at most one project directory.");
+    return { command: "deploy", projectDir: parsed.positionals[0] ?? "." };
+  }
   if (args[0] !== "connect") return { command: "legacy", args };
   const parsed = parseArgs({
     args: args.slice(1),
