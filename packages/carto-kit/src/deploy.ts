@@ -1,13 +1,17 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { access, readFile, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 import { runConnect } from "./connect.js";
 import { inspectFrontsiteProject } from "./project.js";
 
 const SCHEMA_VERSION = 1;
 const require = createRequire(import.meta.url);
 const BUNDLED_WRANGLER_PATH = resolve(dirname(require.resolve("wrangler/package.json")), "bin", "wrangler.js");
+const BUNDLED_CLOUDFLARE_ADAPTER_PATH = require.resolve("@astrojs/cloudflare");
+const BUNDLED_CLOUDFLARE_ENTRYPOINT_PATH = require.resolve("@astrojs/cloudflare/entrypoints/server");
 
 interface DeployConfig {
   schemaVersion: number;
@@ -22,6 +26,8 @@ interface DeployDependencies {
   connect?: typeof runConnect;
   interactive?: boolean;
   wranglerPath?: string;
+  cloudflareAdapterPath?: string;
+  cloudflareEntrypointPath?: string;
 }
 
 export async function runDeploy(directory: string, dependencies: DeployDependencies = {}): Promise<void> {
@@ -40,21 +46,33 @@ export async function runDeploy(directory: string, dependencies: DeployDependenc
   const env = { ...process.env, NODE_ENV: "production", DEPLOYMENT_TARGET: "cloudflare-workers" };
   const wranglerPath = dependencies.wranglerPath ?? BUNDLED_WRANGLER_PATH;
   await ensureCloudflareAuthentication(project.root, wranglerPath, env);
-  await writeWranglerConfig(project.root, config, workerName);
-  console.log(`Deploying ${workerName} to Cloudflare Workers...`);
-  console.log("1/3 Building storefront");
-  await runProjectCommand(project.root, "astro", ["build"], env);
-  console.log("2/3 Syncing runtime secrets");
-  await runWrangler(
+  const deploymentFiles = await createDeploymentFiles(
     project.root,
-    wranglerPath,
-    ["secret", "bulk"],
-    env,
-    `${JSON.stringify({ COMMERCE_API_TOKEN: commerceToken })}\n`
+    config,
+    workerName,
+    dependencies.cloudflareAdapterPath ?? BUNDLED_CLOUDFLARE_ADAPTER_PATH,
+    dependencies.cloudflareEntrypointPath ?? BUNDLED_CLOUDFLARE_ENTRYPOINT_PATH
   );
-  console.log("3/3 Publishing Worker");
-  await runWrangler(project.root, wranglerPath, ["deploy"], env);
-  console.log("Cloudflare deployment completed.");
+  try {
+    console.log(`Deploying ${workerName} to Cloudflare Workers...`);
+    console.log("1/4 Building storefront with the Cloudflare adapter");
+    await runProjectCommand(project.root, "astro", ["build", "--config", deploymentFiles.astroConfigPath], env);
+    console.log("2/4 Validating Worker package");
+    await runWrangler(project.root, wranglerPath, ["deploy", "--dry-run", "--config", deploymentFiles.wranglerConfigPath], env);
+    console.log("3/4 Syncing runtime secrets");
+    await runWrangler(
+      project.root,
+      wranglerPath,
+      ["secret", "bulk", "--config", deploymentFiles.wranglerConfigPath],
+      env,
+      `${JSON.stringify({ COMMERCE_API_TOKEN: commerceToken })}\n`
+    );
+    console.log("4/4 Publishing Worker");
+    await runWrangler(project.root, wranglerPath, ["deploy", "--config", deploymentFiles.wranglerConfigPath], env);
+    console.log("Cloudflare deployment completed.");
+  } finally {
+    await rm(deploymentFiles.tempDir, { recursive: true, force: true });
+  }
 }
 
 export function printDeployHelp(): void {
@@ -169,20 +187,48 @@ function parseEnvValue(raw: string): string {
   return comment >= 0 ? value.slice(0, comment).trim() : value;
 }
 
-async function writeWranglerConfig(root: string, config: DeployConfig, workerName: string): Promise<void> {
+async function createDeploymentFiles(
+  root: string,
+  config: DeployConfig,
+  workerName: string,
+  cloudflareAdapterPath: string,
+  cloudflareEntrypointPath: string
+): Promise<{ tempDir: string; astroConfigPath: string; wranglerConfigPath: string }> {
+  const tempDir = await mkdtemp(resolve(tmpdir(), "carto-cloudflare-deploy-"));
+  const astroConfigPath = resolve(tempDir, "astro.config.mjs");
+  const wranglerConfigPath = resolve(tempDir, "wrangler.jsonc");
+  const originalConfigUrl = pathToFileURL(resolve(root, "astro.config.mjs")).href;
+  const adapterUrl = pathToFileURL(cloudflareAdapterPath).href;
+  const rootUrl = pathToFileURL(root.endsWith(sep) ? root : `${root}${sep}`).href;
+  await writeFile(astroConfigPath, [
+    `import cloudflare from ${JSON.stringify(adapterUrl)};`,
+    `import originalConfig from ${JSON.stringify(originalConfigUrl)};`,
+    "const base = typeof originalConfig === 'function'",
+    "  ? await originalConfig({ command: 'build', mode: 'production' })",
+    "  : await originalConfig;",
+    "export default {",
+    "  ...base,",
+    `  root: new URL(${JSON.stringify(rootUrl)}),`,
+    "  output: 'server',",
+    "  adapter: cloudflare(),",
+    "};",
+    ""
+  ].join("\n"));
+
   const wrangler: Record<string, unknown> = {
     name: workerName,
-    main: "@astrojs/cloudflare/entrypoints/server",
+    main: cloudflareEntrypointPath,
     compatibility_date: config.deployment.compatibilityDate || "2026-08-01",
     compatibility_flags: ["nodejs_compat"],
-    assets: { binding: "ASSETS", directory: "./dist" },
+    assets: { binding: "ASSETS", directory: resolve(root, "dist") },
     observability: { enabled: true }
   };
   if (process.env.PAGE_CACHE_PREFIX) wrangler.vars = { PAGE_CACHE_PREFIX: process.env.PAGE_CACHE_PREFIX };
   if (process.env.CLOUDFLARE_KV_NAMESPACE_ID) {
     wrangler.kv_namespaces = [{ binding: "KV_STORE", id: process.env.CLOUDFLARE_KV_NAMESPACE_ID }];
   }
-  await writeFile(resolve(root, "wrangler.jsonc"), `${JSON.stringify(wrangler, null, 2)}\n`);
+  await writeFile(wranglerConfigPath, `${JSON.stringify(wrangler, null, 2)}\n`);
+  return { tempDir, astroConfigPath, wranglerConfigPath };
 }
 
 function requiredEnv(name: string): string {

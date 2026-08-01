@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmod, mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runDeploy } from "./deploy.js";
@@ -28,6 +28,35 @@ async function installFakeAstro(root: string): Promise<void> {
 async function fakeWrangler(root: string): Promise<string> {
   const path = join(root, "fake-wrangler.cjs");
   await writeFile(path, "process.exit(1);\n");
+  return path;
+}
+
+async function installCapturingAstro(root: string): Promise<void> {
+  const bin = join(root, "node_modules", ".bin");
+  await mkdir(bin, { recursive: true });
+  const path = join(bin, "astro");
+  await writeFile(path, `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const index = process.argv.indexOf("--config");
+fs.copyFileSync(process.argv[index + 1], path.join(process.cwd(), "captured-astro-config.mjs"));
+fs.mkdirSync(path.join(process.cwd(), "dist"), { recursive: true });
+`);
+  await chmod(path, 0o755);
+}
+
+async function successfulWrangler(root: string): Promise<string> {
+  const path = join(root, "successful-wrangler.cjs");
+  await writeFile(path, `
+const fs = require("node:fs");
+const path = require("node:path");
+const index = process.argv.indexOf("--config");
+if (index >= 0) fs.copyFileSync(process.argv[index + 1], path.join(process.cwd(), "captured-wrangler.jsonc"));
+if (process.argv.includes("bulk")) {
+  process.stdin.resume();
+  process.stdin.on("end", () => process.exit(0));
+} else process.exit(0);
+`);
   return path;
 }
 
@@ -89,5 +118,35 @@ test("deploy requests browser authorization instead of requiring API credentials
     if (previousCi === undefined) delete process.env.CI; else process.env.CI = previousCi;
     if (previousAccount === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID; else process.env.CLOUDFLARE_ACCOUNT_ID = previousAccount;
     if (previousToken === undefined) delete process.env.CLOUDFLARE_API_TOKEN; else process.env.CLOUDFLARE_API_TOKEN = previousToken;
+  }
+});
+
+test("deploy builds with temporary bundled Cloudflare configuration", async () => {
+  const root = await frontsiteFixture();
+  await installCapturingAstro(root);
+  const wranglerPath = await successfulWrangler(root);
+  await writeFile(join(root, ".env"), "COMMERCE_API_TOKEN=test-token\n");
+  const previousToken = process.env.COMMERCE_API_TOKEN;
+  const previousAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const previousApiToken = process.env.CLOUDFLARE_API_TOKEN;
+  delete process.env.COMMERCE_API_TOKEN;
+  delete process.env.CLOUDFLARE_ACCOUNT_ID;
+  delete process.env.CLOUDFLARE_API_TOKEN;
+  try {
+    await runDeploy(root, {
+      wranglerPath,
+      cloudflareAdapterPath: "/bundled/cloudflare-adapter.js",
+      cloudflareEntrypointPath: "/bundled/cloudflare-server.js"
+    });
+    const astroConfig = await readFile(join(root, "captured-astro-config.mjs"), "utf8");
+    assert.match(astroConfig, /adapter: cloudflare\(\)/);
+    assert.match(astroConfig, /astro\.config\.mjs/);
+    const wranglerConfig = JSON.parse(await readFile(join(root, "captured-wrangler.jsonc"), "utf8"));
+    assert.equal(wranglerConfig.main, "/bundled/cloudflare-server.js");
+    assert.equal(wranglerConfig.assets.directory, join(root, "dist"));
+  } finally {
+    if (previousToken === undefined) delete process.env.COMMERCE_API_TOKEN; else process.env.COMMERCE_API_TOKEN = previousToken;
+    if (previousAccount === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID; else process.env.CLOUDFLARE_ACCOUNT_ID = previousAccount;
+    if (previousApiToken === undefined) delete process.env.CLOUDFLARE_API_TOKEN; else process.env.CLOUDFLARE_API_TOKEN = previousApiToken;
   }
 });
