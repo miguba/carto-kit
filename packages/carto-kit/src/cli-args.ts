@@ -2,18 +2,25 @@ import { parseArgs } from "node:util";
 
 export type ParsedCommand =
   | { command: "connect"; projectDir: string; cartoUrl?: string; openBrowser: boolean; yes: boolean }
-  | { command: "deploy"; projectDir: string }
+  | { command: "deploy"; projectDir: string; reauth: boolean }
   | { command: "legacy"; args: string[] };
 
 export function parseCommand(args: string[]): ParsedCommand {
   if (args[0] === "deploy") {
     const parsed = parseArgs({
       args: args.slice(1), allowPositionals: true, strict: true,
-      options: { help: { type: "boolean", short: "h" } }
+      options: {
+        reauth: { type: "boolean" },
+        help: { type: "boolean", short: "h" }
+      }
     });
-    if (parsed.values.help) return { command: "deploy", projectDir: "__HELP__" };
+    if (parsed.values.help) return { command: "deploy", projectDir: "__HELP__", reauth: false };
     if (parsed.positionals.length > 1) throw new Error("deploy accepts at most one project directory.");
-    return { command: "deploy", projectDir: parsed.positionals[0] ?? "." };
+    return {
+      command: "deploy",
+      projectDir: parsed.positionals[0] ?? ".",
+      reauth: parsed.values.reauth === true
+    };
   }
   if (args[0] !== "connect") return { command: "legacy", args };
   const parsed = parseArgs({

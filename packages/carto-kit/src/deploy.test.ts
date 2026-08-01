@@ -78,6 +78,23 @@ if (process.argv.includes("bulk")) {
   return path;
 }
 
+async function capturingWrangler(root: string): Promise<string> {
+  const path = join(root, "capturing-wrangler.cjs");
+  await writeFile(path, `
+const fs = require("node:fs");
+fs.appendFileSync("wrangler-calls.jsonl", JSON.stringify({
+  args: process.argv.slice(2),
+  accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+  apiToken: process.env.CLOUDFLARE_API_TOKEN
+}) + "\\n");
+if (process.argv.includes("bulk")) {
+  process.stdin.resume();
+  process.stdin.on("end", () => process.exit(0));
+} else process.exit(0);
+`);
+  return path;
+}
+
 test("deploy requires an interactive Carto connection when the token is missing", async () => {
   const root = await frontsiteFixture();
   const previous = process.env.COMMERCE_API_TOKEN;
@@ -152,6 +169,53 @@ test("deploy requests browser authorization instead of requiring API credentials
     if (previousAccount === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID; else process.env.CLOUDFLARE_ACCOUNT_ID = previousAccount;
     if (previousToken === undefined) delete process.env.CLOUDFLARE_API_TOKEN; else process.env.CLOUDFLARE_API_TOKEN = previousToken;
   }
+});
+
+test("deploy reauthorizes Cloudflare before publishing when requested", async () => {
+  const root = await frontsiteFixture();
+  await installCapturingAstro(root);
+  const wranglerPath = await capturingWrangler(root);
+  await writeFile(join(root, ".env"), "PUBLIC_COMMERCE_API_BASE_URL=https://carto.example.com\nCOMMERCE_API_TOKEN=test-token\n");
+  await writeFile(join(root, "carto.config.json"), JSON.stringify({
+    schemaVersion: 1,
+    deployment: { provider: "cloudflare-workers", customDomain: null }
+  }));
+  const previousAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const previousApiToken = process.env.CLOUDFLARE_API_TOKEN;
+  process.env.CLOUDFLARE_ACCOUNT_ID = "old-account";
+  process.env.CLOUDFLARE_API_TOKEN = "old-token";
+  try {
+    await runDeploy(root, {
+      interactive: true,
+      reauth: true,
+      wranglerPath,
+      cloudflareAdapterPath: "/bundled/cloudflare-adapter.js",
+      cloudflareEntrypointPath: "/bundled/cloudflare-server.js"
+    });
+    const calls = (await readFile(join(root, "wrangler-calls.jsonl"), "utf8"))
+      .trim().split("\n").map((line) => JSON.parse(line));
+    assert.deepEqual(calls.slice(0, 3).map((call) => call.args), [
+      ["logout"],
+      ["login", "--use-keyring"],
+      ["whoami", "--json"]
+    ]);
+    assert.ok(calls.every((call) => call.accountId === undefined && call.apiToken === undefined));
+  } finally {
+    if (previousAccount === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID;
+    else process.env.CLOUDFLARE_ACCOUNT_ID = previousAccount;
+    if (previousApiToken === undefined) delete process.env.CLOUDFLARE_API_TOKEN;
+    else process.env.CLOUDFLARE_API_TOKEN = previousApiToken;
+  }
+});
+
+test("deploy rejects Cloudflare reauthentication outside an interactive terminal", async () => {
+  const root = await frontsiteFixture();
+  await installFakeAstro(root);
+  await writeFile(join(root, ".env"), "PUBLIC_COMMERCE_API_BASE_URL=https://carto.example.com\nCOMMERCE_API_TOKEN=test-token\n");
+  await assert.rejects(
+    runDeploy(root, { interactive: false, reauth: true }),
+    /reauthentication requires an interactive terminal/
+  );
 });
 
 test("deploy builds with temporary Cloudflare configuration", async () => {

@@ -29,6 +29,7 @@ interface DeployDependencies {
   cloudflareEntrypointPath?: string;
   confirmCustomDomain?: () => Promise<boolean>;
   inputCustomDomain?: () => Promise<string>;
+  reauth?: boolean;
 }
 
 export async function runDeploy(directory: string, dependencies: DeployDependencies = {}): Promise<void> {
@@ -48,6 +49,9 @@ export async function runDeploy(directory: string, dependencies: DeployDependenc
 
   const env = { ...process.env, NODE_ENV: "production", DEPLOYMENT_TARGET: "cloudflare-workers" };
   const wranglerPath = dependencies.wranglerPath ?? BUNDLED_WRANGLER_PATH;
+  if (dependencies.reauth) {
+    await reauthenticateCloudflare(project.root, wranglerPath, env, interactive);
+  }
   await ensureCloudflareAuthentication(project.root, wranglerPath, env);
   const persistDomainChoice = await selectCustomDomain(config, interactive, dependencies);
   const cloudflare = dependencies.cloudflareAdapterPath && dependencies.cloudflareEntrypointPath
@@ -97,7 +101,10 @@ export function printDeployHelp(): void {
 Deploy a Carto Frontsite project to Cloudflare Workers.
 
 Usage:
-  carto deploy [project-directory]
+  carto deploy [project-directory] [--reauth]
+
+Options:
+  --reauth  Clear the saved Cloudflare login and authorize again before deploying.
 
 Authentication:
   If the project is not connected to Carto, deploy starts browser authorization.
@@ -113,6 +120,40 @@ Custom domains:
   Interactive deployments can bind a Cloudflare-managed hostname.
   The selection is saved to carto.config.json after a successful deployment.
 `);
+}
+
+async function reauthenticateCloudflare(
+  root: string,
+  wranglerPath: string,
+  env: NodeJS.ProcessEnv,
+  interactive: boolean
+): Promise<void> {
+  if (!interactive) {
+    throw new Error("Cloudflare reauthentication requires an interactive terminal.");
+  }
+  clearCloudflareEnvironmentCredentials(env);
+  console.log("Resetting Cloudflare authentication...");
+  await runWrangler(root, wranglerPath, ["logout"], env);
+  console.log("Opening Cloudflare authorization in your browser...");
+  await runWrangler(root, wranglerPath, ["login", "--use-keyring"], env);
+  if (!(await wranglerSucceeds(root, wranglerPath, ["whoami", "--json"], env))) {
+    throw new Error("Cloudflare authorization did not complete. Run the deploy command again to retry.");
+  }
+}
+
+function clearCloudflareEnvironmentCredentials(env: NodeJS.ProcessEnv): void {
+  for (const name of [
+    "CLOUDFLARE_ACCOUNT_ID",
+    "CLOUDFLARE_API_TOKEN",
+    "CLOUDFLARE_API_KEY",
+    "CLOUDFLARE_EMAIL",
+    "CF_ACCOUNT_ID",
+    "CF_API_TOKEN",
+    "CF_API_KEY",
+    "CF_EMAIL"
+  ]) {
+    delete env[name];
+  }
 }
 
 async function ensureCartoConnection(
