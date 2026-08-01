@@ -20,14 +20,13 @@ export async function runDeploy(directory: string): Promise<void> {
   const config = await readDeployConfig(project.root);
   const workerName = normalizeWorkerName(config.deployment.workerName || process.env.APP_NAME || project.packageName);
 
-  requiredEnv("CLOUDFLARE_ACCOUNT_ID");
-  requiredEnv("CLOUDFLARE_API_TOKEN");
   const commerceToken = requiredEnv("COMMERCE_API_TOKEN");
   await requireProjectCommand(project.root, "astro");
   await requireProjectCommand(project.root, "wrangler");
-  await writeWranglerConfig(project.root, config, workerName);
 
   const env = { ...process.env, NODE_ENV: "production", DEPLOYMENT_TARGET: "cloudflare-workers" };
+  await ensureCloudflareAuthentication(project.root, env);
+  await writeWranglerConfig(project.root, config, workerName);
   console.log(`Deploying ${workerName} to Cloudflare Workers...`);
   console.log("1/3 Building storefront");
   await runProjectCommand(project.root, "astro", ["build"], env);
@@ -52,11 +51,45 @@ Deploy a Carto Frontsite project to Cloudflare Workers.
 Usage:
   carto deploy [project-directory]
 
-Required environment variables:
-  CLOUDFLARE_ACCOUNT_ID
-  CLOUDFLARE_API_TOKEN
+Authentication:
+  Local deployments use Cloudflare browser authorization through Wrangler.
+  CI deployments use CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN.
+
+Required project secret:
   COMMERCE_API_TOKEN
 `);
+}
+
+async function ensureCloudflareAuthentication(root: string, env: NodeJS.ProcessEnv): Promise<void> {
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID?.trim();
+  const apiToken = env.CLOUDFLARE_API_TOKEN?.trim();
+  const hasConfiguredApiCredentials = Boolean(accountId || apiToken);
+
+  if (!accountId) delete env.CLOUDFLARE_ACCOUNT_ID;
+  if (!apiToken) delete env.CLOUDFLARE_API_TOKEN;
+
+  if (hasConfiguredApiCredentials && (!accountId || !apiToken)) {
+    throw new Error("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN must be configured together.");
+  }
+
+  if (await commandSucceeds(root, "wrangler", ["whoami", "--json"], env)) return;
+
+  if (hasConfiguredApiCredentials) {
+    throw new Error("Cloudflare API credentials are configured but authentication failed. Check the account ID and API token.");
+  }
+
+  if (!process.stdin.isTTY || process.env.CI) {
+    throw new Error(
+      "Cloudflare authentication is required. Run this command in an interactive terminal to authorize in your browser, " +
+      "or configure CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN for CI."
+    );
+  }
+
+  console.log("Opening Cloudflare authorization in your browser...");
+  await runProjectCommand(root, "wrangler", ["login", "--use-keyring"], env);
+  if (!(await commandSucceeds(root, "wrangler", ["whoami", "--json"], env))) {
+    throw new Error("Cloudflare authorization did not complete. Run the deploy command again to retry.");
+  }
 }
 
 async function readDeployConfig(root: string): Promise<DeployConfig> {
@@ -151,5 +184,18 @@ async function runProjectCommand(root: string, command: string, args: string[], 
       else reject(new Error(`${command} ${args.join(" ")} failed${signal ? ` with signal ${signal}` : ` with exit code ${code}`}.`));
     });
     if (stdin !== undefined) child.stdin?.end(stdin);
+  });
+}
+
+async function commandSucceeds(root: string, command: string, args: string[], env: NodeJS.ProcessEnv): Promise<boolean> {
+  return new Promise<boolean>((done) => {
+    const child = spawn(commandPath(root, command), args, {
+      cwd: root,
+      env,
+      stdio: "ignore",
+      shell: process.platform === "win32"
+    });
+    child.once("error", () => done(false));
+    child.once("exit", (code) => done(code === 0));
   });
 }

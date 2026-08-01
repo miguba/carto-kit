@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runDeploy } from "./deploy.js";
@@ -17,14 +17,24 @@ async function frontsiteFixture(): Promise<string> {
   return root;
 }
 
-test("deploy fails safely before build when Cloudflare credentials are missing", async () => {
+async function installFakeProjectCommands(root: string): Promise<void> {
+  const bin = join(root, "node_modules", ".bin");
+  await mkdir(bin, { recursive: true });
+  for (const command of ["astro", "wrangler"]) {
+    const path = join(bin, command);
+    await writeFile(path, "#!/bin/sh\nexit 1\n");
+    await chmod(path, 0o755);
+  }
+}
+
+test("deploy requires the Carto commerce token before authentication", async () => {
   const root = await frontsiteFixture();
-  const previous = process.env.CLOUDFLARE_ACCOUNT_ID;
-  delete process.env.CLOUDFLARE_ACCOUNT_ID;
-  try { await assert.rejects(runDeploy(root), /CLOUDFLARE_ACCOUNT_ID/); }
+  const previous = process.env.COMMERCE_API_TOKEN;
+  delete process.env.COMMERCE_API_TOKEN;
+  try { await assert.rejects(runDeploy(root), /COMMERCE_API_TOKEN/); }
   finally {
-    if (previous === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID;
-    else process.env.CLOUDFLARE_ACCOUNT_ID = previous;
+    if (previous === undefined) delete process.env.COMMERCE_API_TOKEN;
+    else process.env.COMMERCE_API_TOKEN = previous;
   }
 });
 
@@ -34,4 +44,23 @@ test("deploy rejects incompatible project configuration", async () => {
     schemaVersion: 2, deployment: { provider: "cloudflare-workers" }
   }));
   await assert.rejects(runDeploy(root), /schemaVersion 2/);
+});
+
+test("deploy requests browser authorization instead of requiring API credentials locally", async () => {
+  const root = await frontsiteFixture();
+  await installFakeProjectCommands(root);
+  await writeFile(join(root, ".env"), "COMMERCE_API_TOKEN=test-token\n");
+  const previousCi = process.env.CI;
+  const previousAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const previousToken = process.env.CLOUDFLARE_API_TOKEN;
+  process.env.CI = "true";
+  delete process.env.CLOUDFLARE_ACCOUNT_ID;
+  delete process.env.CLOUDFLARE_API_TOKEN;
+  try {
+    await assert.rejects(runDeploy(root), /interactive terminal to authorize in your browser/);
+  } finally {
+    if (previousCi === undefined) delete process.env.CI; else process.env.CI = previousCi;
+    if (previousAccount === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID; else process.env.CLOUDFLARE_ACCOUNT_ID = previousAccount;
+    if (previousToken === undefined) delete process.env.CLOUDFLARE_API_TOKEN; else process.env.CLOUDFLARE_API_TOKEN = previousToken;
+  }
 });
