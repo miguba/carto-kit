@@ -1,10 +1,13 @@
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { access, readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { runConnect } from "./connect.js";
 import { inspectFrontsiteProject } from "./project.js";
 
 const SCHEMA_VERSION = 1;
+const require = createRequire(import.meta.url);
+const BUNDLED_WRANGLER_PATH = resolve(dirname(require.resolve("wrangler/package.json")), "bin", "wrangler.js");
 
 interface DeployConfig {
   schemaVersion: number;
@@ -18,6 +21,7 @@ interface DeployConfig {
 interface DeployDependencies {
   connect?: typeof runConnect;
   interactive?: boolean;
+  wranglerPath?: string;
 }
 
 export async function runDeploy(directory: string, dependencies: DeployDependencies = {}): Promise<void> {
@@ -32,24 +36,24 @@ export async function runDeploy(directory: string, dependencies: DeployDependenc
     dependencies.interactive ?? Boolean(process.stdin.isTTY && !process.env.CI)
   );
   await requireProjectCommand(project.root, "astro");
-  await requireProjectCommand(project.root, "wrangler");
 
   const env = { ...process.env, NODE_ENV: "production", DEPLOYMENT_TARGET: "cloudflare-workers" };
-  await ensureCloudflareAuthentication(project.root, env);
+  const wranglerPath = dependencies.wranglerPath ?? BUNDLED_WRANGLER_PATH;
+  await ensureCloudflareAuthentication(project.root, wranglerPath, env);
   await writeWranglerConfig(project.root, config, workerName);
   console.log(`Deploying ${workerName} to Cloudflare Workers...`);
   console.log("1/3 Building storefront");
   await runProjectCommand(project.root, "astro", ["build"], env);
   console.log("2/3 Syncing runtime secrets");
-  await runProjectCommand(
+  await runWrangler(
     project.root,
-    "wrangler",
+    wranglerPath,
     ["secret", "bulk"],
     env,
     `${JSON.stringify({ COMMERCE_API_TOKEN: commerceToken })}\n`
   );
   console.log("3/3 Publishing Worker");
-  await runProjectCommand(project.root, "wrangler", ["deploy"], env);
+  await runWrangler(project.root, wranglerPath, ["deploy"], env);
   console.log("Cloudflare deployment completed.");
 }
 
@@ -93,7 +97,7 @@ async function ensureCartoConnection(
   return requiredEnv("COMMERCE_API_TOKEN");
 }
 
-async function ensureCloudflareAuthentication(root: string, env: NodeJS.ProcessEnv): Promise<void> {
+async function ensureCloudflareAuthentication(root: string, wranglerPath: string, env: NodeJS.ProcessEnv): Promise<void> {
   const accountId = env.CLOUDFLARE_ACCOUNT_ID?.trim();
   const apiToken = env.CLOUDFLARE_API_TOKEN?.trim();
   const hasConfiguredApiCredentials = Boolean(accountId || apiToken);
@@ -105,7 +109,7 @@ async function ensureCloudflareAuthentication(root: string, env: NodeJS.ProcessE
     throw new Error("CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_API_TOKEN must be configured together.");
   }
 
-  if (await commandSucceeds(root, "wrangler", ["whoami", "--json"], env)) return;
+  if (await wranglerSucceeds(root, wranglerPath, ["whoami", "--json"], env)) return;
 
   if (hasConfiguredApiCredentials) {
     throw new Error("Cloudflare API credentials are configured but authentication failed. Check the account ID and API token.");
@@ -119,8 +123,8 @@ async function ensureCloudflareAuthentication(root: string, env: NodeJS.ProcessE
   }
 
   console.log("Opening Cloudflare authorization in your browser...");
-  await runProjectCommand(root, "wrangler", ["login", "--use-keyring"], env);
-  if (!(await commandSucceeds(root, "wrangler", ["whoami", "--json"], env))) {
+  await runWrangler(root, wranglerPath, ["login", "--use-keyring"], env);
+  if (!(await wranglerSucceeds(root, wranglerPath, ["whoami", "--json"], env))) {
     throw new Error("Cloudflare authorization did not complete. Run the deploy command again to retry.");
   }
 }
@@ -167,7 +171,6 @@ function parseEnvValue(raw: string): string {
 
 async function writeWranglerConfig(root: string, config: DeployConfig, workerName: string): Promise<void> {
   const wrangler: Record<string, unknown> = {
-    $schema: "./node_modules/wrangler/config-schema.json",
     name: workerName,
     main: "@astrojs/cloudflare/entrypoints/server",
     compatibility_date: config.deployment.compatibilityDate || "2026-08-01",
@@ -220,13 +223,28 @@ async function runProjectCommand(root: string, command: string, args: string[], 
   });
 }
 
-async function commandSucceeds(root: string, command: string, args: string[], env: NodeJS.ProcessEnv): Promise<boolean> {
-  return new Promise<boolean>((done) => {
-    const child = spawn(commandPath(root, command), args, {
+async function runWrangler(root: string, wranglerPath: string, args: string[], env: NodeJS.ProcessEnv, stdin?: string): Promise<void> {
+  await new Promise<void>((done, reject) => {
+    const child = spawn(process.execPath, [wranglerPath, ...args], {
       cwd: root,
       env,
-      stdio: "ignore",
-      shell: process.platform === "win32"
+      stdio: [stdin === undefined ? "inherit" : "pipe", "inherit", "inherit"]
+    });
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      if (code === 0) done();
+      else reject(new Error(`wrangler ${args.join(" ")} failed${signal ? ` with signal ${signal}` : ` with exit code ${code}`}.`));
+    });
+    if (stdin !== undefined) child.stdin?.end(stdin);
+  });
+}
+
+async function wranglerSucceeds(root: string, wranglerPath: string, args: string[], env: NodeJS.ProcessEnv): Promise<boolean> {
+  return new Promise<boolean>((done) => {
+    const child = spawn(process.execPath, [wranglerPath, ...args], {
+      cwd: root,
+      env,
+      stdio: "ignore"
     });
     child.once("error", () => done(false));
     child.once("exit", (code) => done(code === 0));

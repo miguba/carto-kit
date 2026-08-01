@@ -17,14 +17,18 @@ async function frontsiteFixture(): Promise<string> {
   return root;
 }
 
-async function installFakeProjectCommands(root: string): Promise<void> {
+async function installFakeAstro(root: string): Promise<void> {
   const bin = join(root, "node_modules", ".bin");
   await mkdir(bin, { recursive: true });
-  for (const command of ["astro", "wrangler"]) {
-    const path = join(bin, command);
-    await writeFile(path, "#!/bin/sh\nexit 1\n");
-    await chmod(path, 0o755);
-  }
+  const path = join(bin, "astro");
+  await writeFile(path, "#!/bin/sh\nexit 1\n");
+  await chmod(path, 0o755);
+}
+
+async function fakeWrangler(root: string): Promise<string> {
+  const path = join(root, "fake-wrangler.cjs");
+  await writeFile(path, "process.exit(1);\n");
+  return path;
 }
 
 test("deploy requires an interactive Carto connection when the token is missing", async () => {
@@ -70,7 +74,8 @@ test("deploy rejects incompatible project configuration", async () => {
 
 test("deploy requests browser authorization instead of requiring API credentials locally", async () => {
   const root = await frontsiteFixture();
-  await installFakeProjectCommands(root);
+  await installFakeAstro(root);
+  const wranglerPath = await fakeWrangler(root);
   await writeFile(join(root, ".env"), "COMMERCE_API_TOKEN=test-token\n");
   const previousCi = process.env.CI;
   const previousAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -79,7 +84,7 @@ test("deploy requests browser authorization instead of requiring API credentials
   delete process.env.CLOUDFLARE_ACCOUNT_ID;
   delete process.env.CLOUDFLARE_API_TOKEN;
   try {
-    await assert.rejects(runDeploy(root), /interactive terminal to authorize in your browser/);
+    await assert.rejects(runDeploy(root, { wranglerPath }), /interactive terminal to authorize in your browser/);
   } finally {
     if (previousCi === undefined) delete process.env.CI; else process.env.CI = previousCi;
     if (previousAccount === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID; else process.env.CLOUDFLARE_ACCOUNT_ID = previousAccount;
