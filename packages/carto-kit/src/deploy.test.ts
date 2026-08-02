@@ -51,6 +51,37 @@ fs.copyFileSync(wranglerConfigPath, path.join(process.cwd(), "dist", "server", "
   await chmod(path, 0o755);
 }
 
+async function installAstro(root: string, version: string): Promise<void> {
+  const packageRoot = join(root, "node_modules", "astro");
+  await mkdir(packageRoot, { recursive: true });
+  await writeFile(join(packageRoot, "package.json"), JSON.stringify({ version }));
+  await installCapturingAstro(root);
+}
+
+async function adapterInstallingNpm(root: string): Promise<string> {
+  const path = join(root, "fake-npm.cjs");
+  await writeFile(path, `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+fs.writeFileSync("captured-npm.json", JSON.stringify({
+  args: process.argv.slice(2),
+  nodeEnv: process.env.NODE_ENV
+}));
+if (!process.argv.includes("--include=dev")) process.exit(2);
+const adapter = path.join(process.cwd(), "node_modules", "@astrojs", "cloudflare");
+fs.mkdirSync(adapter, { recursive: true });
+fs.writeFileSync(path.join(adapter, "package.json"), JSON.stringify({
+  version: "14.1.7",
+  main: "index.js",
+  exports: { ".": "./index.js", "./entrypoints/server": "./server.js" }
+}));
+fs.writeFileSync(path.join(adapter, "index.js"), "module.exports = () => ({});\\n");
+fs.writeFileSync(path.join(adapter, "server.js"), "module.exports = {};\\n");
+`);
+  await chmod(path, 0o755);
+  return path;
+}
+
 async function successfulWrangler(root: string): Promise<string> {
   const path = join(root, "successful-wrangler.cjs");
   await writeFile(path, `
@@ -371,6 +402,40 @@ test("deploy builds with temporary Cloudflare configuration", async () => {
     if (previousBaseUrl === undefined) delete process.env.PUBLIC_COMMERCE_API_BASE_URL; else process.env.PUBLIC_COMMERCE_API_BASE_URL = previousBaseUrl;
     if (previousAccount === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID; else process.env.CLOUDFLARE_ACCOUNT_ID = previousAccount;
     if (previousApiToken === undefined) delete process.env.CLOUDFLARE_API_TOKEN; else process.env.CLOUDFLARE_API_TOKEN = previousApiToken;
+  }
+});
+
+test("deploy installs the Astro 7 adapter even in the production deployment environment", async () => {
+  const root = await frontsiteFixture();
+  await installAstro(root, "7.1.6");
+  const npmPath = await adapterInstallingNpm(root);
+  const wranglerPath = await successfulWrangler(root);
+  await writeFile(join(root, ".env"), "PUBLIC_COMMERCE_API_BASE_URL=https://carto.example.com\nCOMMERCE_API_TOKEN=test-token\n");
+  await writeFile(join(root, "carto.config.json"), JSON.stringify({
+    schemaVersion: 1,
+    deployment: { provider: "cloudflare-workers", customDomain: null }
+  }));
+  const previousAccount = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const previousApiToken = process.env.CLOUDFLARE_API_TOKEN;
+  delete process.env.CLOUDFLARE_ACCOUNT_ID;
+  delete process.env.CLOUDFLARE_API_TOKEN;
+  try {
+    await runDeploy(root, { interactive: true, npmPath, wranglerPath });
+    const invocation = JSON.parse(await readFile(join(root, "captured-npm.json"), "utf8"));
+    assert.equal(invocation.nodeEnv, "production");
+    assert.deepEqual(invocation.args, [
+      "install",
+      "--save-dev",
+      "--include=dev",
+      "--no-audit",
+      "--no-fund",
+      "@astrojs/cloudflare@^14.1.7"
+    ]);
+  } finally {
+    if (previousAccount === undefined) delete process.env.CLOUDFLARE_ACCOUNT_ID;
+    else process.env.CLOUDFLARE_ACCOUNT_ID = previousAccount;
+    if (previousApiToken === undefined) delete process.env.CLOUDFLARE_API_TOKEN;
+    else process.env.CLOUDFLARE_API_TOKEN = previousApiToken;
   }
 });
 

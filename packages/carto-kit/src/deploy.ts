@@ -25,6 +25,7 @@ interface DeployDependencies {
   connect?: typeof runConnect;
   interactive?: boolean;
   wranglerPath?: string;
+  npmPath?: string;
   cloudflareAdapterPath?: string;
   cloudflareEntrypointPath?: string;
   confirmCustomDomain?: () => Promise<boolean>;
@@ -77,7 +78,7 @@ export async function runDeploy(directory: string, dependencies: DeployDependenc
         adapterPath: dependencies.cloudflareAdapterPath,
         entrypointPath: dependencies.cloudflareEntrypointPath
       }
-    : await ensureCloudflareAdapter(project.root, env);
+    : await ensureCloudflareAdapter(project.root, env, dependencies.npmPath ?? npmCommand());
   const deploymentFiles = await createDeploymentFiles(
     project.root,
     config,
@@ -318,7 +319,8 @@ async function writeDeployConfig(root: string, config: DeployConfig): Promise<vo
 
 async function ensureCloudflareAdapter(
   root: string,
-  env: NodeJS.ProcessEnv
+  env: NodeJS.ProcessEnv,
+  npmPath: string
 ): Promise<{ adapterPath: string; entrypointPath: string }> {
   const astroVersion = await readInstalledPackageVersion(root, "astro");
   if (!astroVersion) throw new Error("Missing astro. Install the Frontsite project dependencies first.");
@@ -333,16 +335,17 @@ async function ensureCloudflareAdapter(
   let adapterVersion = await readInstalledPackageVersion(root, "@astrojs/cloudflare", false);
   if (!adapterVersion || Number.parseInt(adapterVersion.split(".")[0], 10) !== compatibleAdapter.major) {
     console.log(`Preparing @astrojs/cloudflare for Astro ${astroMajor}...`);
-    await runCommand(root, npmCommand(), [
+    await runCommand(root, npmPath, [
       "install",
       "--save-dev",
+      "--include=dev",
       "--no-audit",
       "--no-fund",
       `@astrojs/cloudflare@${compatibleAdapter.version}`
-    ], env);
+    ], env, undefined, "npm");
     adapterVersion = await readInstalledPackageVersion(root, "@astrojs/cloudflare", false);
     if (!adapterVersion) {
-      await runCommand(root, npmCommand(), ["install", "--no-audit", "--no-fund"], env);
+      await runCommand(root, npmPath, ["install", "--include=dev", "--no-audit", "--no-fund"], env, undefined, "npm");
       adapterVersion = await readInstalledPackageVersion(root, "@astrojs/cloudflare", false);
     }
   }
