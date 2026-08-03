@@ -228,7 +228,7 @@ async function exists(path: string): Promise<boolean> { try { await access(path,
 
 async function capture(command: string, args: string[], cwd: string): Promise<{ code: number; signal: string | null; stdout: string; outputTail: string }> {
   return await new Promise((resolvePromise) => {
-    const child = spawn(command, args, { cwd, env: process.env, shell: false, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(command, args, { cwd, env: process.env, shell: process.platform === "win32", stdio: ["ignore", "pipe", "pipe"] });
     let stdout = ""; let combined = "";
     child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); combined += chunk.toString(); });
     child.stderr.on("data", (chunk: Buffer) => { combined += chunk.toString(); });
@@ -239,7 +239,7 @@ async function capture(command: string, args: string[], cwd: string): Promise<{ 
 
 async function runSilent(command: string, args: string[], cwd: string): Promise<{ code: number; signal: string | null }> {
   return await new Promise((resolvePromise) => {
-    const child = spawn(command, args, { cwd, env: process.env, shell: false, stdio: "ignore" });
+    const child = spawn(command, args, { cwd, env: process.env, shell: process.platform === "win32", stdio: "ignore" });
     child.once("error", () => resolvePromise({ code: 127, signal: null }));
     child.once("exit", (code, signal) => resolvePromise({ code: code ?? 1, signal }));
   });

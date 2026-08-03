@@ -524,11 +524,12 @@ async function runCommand(
   displayName = executable
 ): Promise<void> {
   await new Promise<void>((done, reject) => {
-    const child = spawn(executable, args, {
+    const isNodeScript = /\.(?:cjs|mjs|js)$/i.test(executable);
+    const child = spawn(isNodeScript ? process.execPath : executable, isNodeScript ? [executable, ...args] : args, {
       cwd: root,
       env,
       stdio: [stdin === undefined ? "inherit" : "pipe", "inherit", "inherit"],
-      shell: process.platform === "win32"
+      shell: !isNodeScript && process.platform === "win32"
     });
     child.once("error", reject);
     child.once("exit", (code, signal) => {

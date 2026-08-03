@@ -20,9 +20,13 @@ async function frontsiteFixture(): Promise<string> {
 async function installFakeAstro(root: string): Promise<void> {
   const bin = join(root, "node_modules", ".bin");
   await mkdir(bin, { recursive: true });
-  const path = join(bin, "astro");
-  await writeFile(path, "#!/bin/sh\nexit 1\n");
-  await chmod(path, 0o755);
+  if (process.platform === "win32") {
+    await writeFile(join(bin, "astro.cmd"), "@echo off\r\nexit /b 1\r\n");
+  } else {
+    const path = join(bin, "astro");
+    await writeFile(path, "#!/bin/sh\nexit 1\n");
+    await chmod(path, 0o755);
+  }
 }
 
 async function fakeWrangler(root: string): Promise<string> {
@@ -34,8 +38,8 @@ async function fakeWrangler(root: string): Promise<string> {
 async function installCapturingAstro(root: string): Promise<void> {
   const bin = join(root, "node_modules", ".bin");
   await mkdir(bin, { recursive: true });
-  const path = join(bin, "astro");
-  await writeFile(path, `#!/usr/bin/env node
+  const script = join(bin, "astro-fixture.cjs");
+  await writeFile(script, `
 const fs = require("node:fs");
 const path = require("node:path");
 const index = process.argv.indexOf("--config");
@@ -47,7 +51,13 @@ const wranglerConfigPath = JSON.parse(astroConfig.match(/configPath: ("[^"]+")/)
 fs.mkdirSync(path.join(process.cwd(), "dist", "server"), { recursive: true });
 fs.copyFileSync(wranglerConfigPath, path.join(process.cwd(), "dist", "server", "wrangler.json"));
 `);
-  await chmod(path, 0o755);
+  if (process.platform === "win32") {
+    await writeFile(join(bin, "astro.cmd"), "@echo off\r\nnode \"%~dp0\\astro-fixture.cjs\" %*\r\n");
+  } else {
+    const path = join(bin, "astro");
+    await writeFile(path, `#!/bin/sh\nexec node "$(dirname "$0")/astro-fixture.cjs" "$@"\n`);
+    await chmod(path, 0o755);
+  }
 }
 
 async function installAstro(root: string, version: string): Promise<void> {
