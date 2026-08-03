@@ -1,6 +1,6 @@
 {
   "name": "carto-kit",
-  "version": "0.1.35",
+  "version": "0.1.36",
   "description": "Connect, verify, and deploy Carto Frontsite projects",
   "repository": {
     "type": "git",
