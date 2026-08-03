@@ -10,15 +10,15 @@ GitHub Actions Trusted Publishing workflow; ordinary branch commits never publis
 2. Validate the exact version locally:
 
    ```bash
-   npm run release:npm -- 0.1.32 --dry-run
+   npm run release:npm -- 0.1.33 --dry-run
    ```
 
 3. Commit and push the intended changes to `origin/main`.
 4. Create and push an annotated tag matching the package version exactly:
 
    ```bash
-   git tag -a v0.1.32 -m "Release v0.1.32"
-   git push origin v0.1.32
+   git tag -a v0.1.33 -m "Release v0.1.33"
+   git push origin v0.1.33
    ```
 
 The tag-triggered workflow runs tests, verifies that the tag matches the package
