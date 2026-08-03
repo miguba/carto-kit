@@ -1,7 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /checkout
-Disallow: /orders/
-Disallow: /api/
-
-Sitemap: /sitemap.xml

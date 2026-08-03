@@ -1,35 +1,29 @@
-# Carto Kit npm 发布流程
+# Carto Kit npm release
 
-仓库只发布 `carto-kit`。项目脚手架和 `create-carto` 包已从本仓库移除。
+This repository publishes only `carto-kit`. A semantic version tag triggers the
+GitHub Actions Trusted Publishing workflow; ordinary branch commits never publish.
 
-```bash
-npm install
-npm run test
-npm run release:npm -- --patch --dry-run
-npm run release:npm -- --patch --publish
-```
+## Release
 
-也可以传明确版本：
+1. Choose an unpublished version and update `packages/carto-kit/package.json` and
+   `package-lock.json` to that exact version.
+2. Validate the exact version locally:
 
-```bash
-npm run release:npm -- 0.2.0 --dry-run
-npm run release:npm -- 0.2.0 --publish --otp 123456
-```
+   ```bash
+   npm run release:npm -- 0.1.32 --dry-run
+   ```
 
-发布脚本会更新 `carto-kit` 版本、刷新 lockfile、运行完整检查、执行
-`npm pack` 与 publish dry run。只有 `--publish` 会真正发布并保留版本变更；
-dry run 会恢复 package 与 lockfile。
+3. Commit and push the intended changes to `origin/main`.
+4. Create and push an annotated tag matching the package version exactly:
 
-正式发布前确认工作区只包含本次变更，并检查：
+   ```bash
+   git tag -a v0.1.32 -m "Release v0.1.32"
+   git push origin v0.1.32
+   ```
 
-```bash
-git status --short
-npm pack --workspace carto-kit --dry-run
-```
+The tag-triggered workflow runs tests, verifies that the tag matches the package
+version, and publishes through npm Trusted Publishing with GitHub OIDC. It does
+not use `NODE_AUTH_TOKEN` or `npm login`.
 
-发布后确认：
-
-```bash
-npm view carto-kit dist-tags --json
-npm view carto-kit versions --json
-```
+Never move, reuse, force-push, or delete a published release tag. Local
+`npm publish` is an explicit emergency fallback, not the standard release path.

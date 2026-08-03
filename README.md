@@ -5,16 +5,17 @@ Command-line tools for connecting Carto Frontsite projects.
 ## Packages
 
 - `packages/carto-kit`: Carto Kit CLI.
-- `templates/single-product`: one-domain, one-product storefront template.
-- `templates/multi-product`: catalog storefront template with Cloudflare and VPS deployment modes.
+
+Project creation lives in the independent `create-carto-frontsite` project,
+which clones the maintained starter from GitHub. This repository does not embed
+or publish storefront templates.
 
 ## Development
 
 ```bash
 npm install
+npm test
 npm run build
-npm --prefix templates/single-product run dev
-npm --prefix templates/multi-product run dev
 ```
 
 ## Connect A Frontsite
@@ -33,8 +34,15 @@ Server App token only to the ignored local `.env`, and verifies the Commerce
 API connection. Carto Private must implement the device authorization contract
 in [docs/carto-private-connect-contract.md](docs/carto-private-connect-contract.md).
 
+## Deploy A Frontsite
+
+From an existing Carto Frontsite project:
+
+```bash
+npx carto-kit@latest deploy
+```
+
 ## Publishing
 
-See [docs/npm-release.md](docs/npm-release.md) for the npm release checklist,
-including version bumps, dry runs, OTP handling, and
-post-publish verification.
+See [docs/npm-release.md](docs/npm-release.md) for the tag-triggered npm release
+checklist.

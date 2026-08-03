@@ -2,8 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { chmod, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { runDeploy } from "./deploy.js";
 
 async function frontsiteFixture(): Promise<string> {
@@ -58,7 +57,7 @@ async function installAstro(root: string, version: string): Promise<void> {
   await installCapturingAstro(root);
 }
 
-async function adapterInstallingNpm(root: string): Promise<string> {
+async function adapterInstallingNpm(root: string, adapterVersion = "14.1.7"): Promise<string> {
   const path = join(root, "fake-npm.cjs");
   await writeFile(path, `#!/usr/bin/env node
 const fs = require("node:fs");
@@ -71,7 +70,7 @@ if (!process.argv.includes("--include=dev")) process.exit(2);
 const adapter = path.join(process.cwd(), "node_modules", "@astrojs", "cloudflare");
 fs.mkdirSync(adapter, { recursive: true });
 fs.writeFileSync(path.join(adapter, "package.json"), JSON.stringify({
-  version: "14.1.7",
+  version: "${adapterVersion}",
   main: "index.js",
   exports: { ".": "./index.js", "./entrypoints/server": "./server.js" }
 }));
@@ -439,9 +438,10 @@ test("deploy installs the Astro 7 adapter even in the production deployment envi
   }
 });
 
-test("deploy builds the Astro 6 Frontsite template with its matching adapter", async () => {
-  const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-  const root = join(repositoryRoot, "templates", "single-product");
+test("deploy builds an Astro 6 Frontsite with its matching adapter", async () => {
+  const root = await frontsiteFixture();
+  await installAstro(root, "6.20.0");
+  const npmPath = await adapterInstallingNpm(root, "13.7.0");
   const wranglerPath = await noOpWrangler();
   const previousToken = process.env.COMMERCE_API_TOKEN;
   const previousBaseUrl = process.env.PUBLIC_COMMERCE_API_BASE_URL;
@@ -452,7 +452,16 @@ test("deploy builds the Astro 6 Frontsite template with its matching adapter", a
   delete process.env.CLOUDFLARE_ACCOUNT_ID;
   delete process.env.CLOUDFLARE_API_TOKEN;
   try {
-    await runDeploy(root, { wranglerPath });
+    await runDeploy(root, { npmPath, wranglerPath });
+    const invocation = JSON.parse(await readFile(join(root, "captured-npm.json"), "utf8"));
+    assert.deepEqual(invocation.args, [
+      "install",
+      "--save-dev",
+      "--include=dev",
+      "--no-audit",
+      "--no-fund",
+      "@astrojs/cloudflare@^13.7.0"
+    ]);
   } finally {
     if (previousToken === undefined) delete process.env.COMMERCE_API_TOKEN; else process.env.COMMERCE_API_TOKEN = previousToken;
     if (previousBaseUrl === undefined) delete process.env.PUBLIC_COMMERCE_API_BASE_URL; else process.env.PUBLIC_COMMERCE_API_BASE_URL = previousBaseUrl;
