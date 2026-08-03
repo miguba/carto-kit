@@ -11,7 +11,7 @@ import { doctorFrontsite, verifyFrontsite, type FrontsiteReport } from "./fronts
 import { createOutput } from "./output.js";
 import { redactSensitive } from "./security.js";
 
-const CLI_VERSION = "0.1.34";
+const CLI_VERSION = "0.1.35";
 
 async function aiMain(): Promise<void> {
   let parsed: ReturnType<typeof parseArgs>;
