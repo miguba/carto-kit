@@ -224,7 +224,11 @@ test("deploy requests browser authorization instead of requiring API credentials
   delete process.env.CLOUDFLARE_ACCOUNT_ID;
   delete process.env.CLOUDFLARE_API_TOKEN;
   try {
-    await assert.rejects(runDeploy(root, { wranglerPath }), /interactive terminal to authorize in your browser/);
+    await assert.rejects(runDeploy(root, {
+      wranglerPath,
+      cloudflareAdapterPath: "/bundled/cloudflare-adapter.js",
+      cloudflareEntrypointPath: "/bundled/cloudflare-server.js"
+    }), /interactive terminal to authorize in your browser/);
   } finally {
     if (previousCi === undefined) delete process.env.CI; else process.env.CI = previousCi;
     if (previousBaseUrl === undefined) delete process.env.PUBLIC_COMMERCE_API_BASE_URL; else process.env.PUBLIC_COMMERCE_API_BASE_URL = previousBaseUrl;
@@ -349,7 +353,12 @@ test("deploy rejects Cloudflare reauthentication outside an interactive terminal
   await installFakeAstro(root);
   await writeFile(join(root, ".env"), "PUBLIC_COMMERCE_API_BASE_URL=https://carto.example.com\nCOMMERCE_API_TOKEN=test-token\n");
   await assert.rejects(
-    runDeploy(root, { interactive: false, reauth: true }),
+    runDeploy(root, {
+      interactive: false,
+      reauth: true,
+      cloudflareAdapterPath: "/bundled/cloudflare-adapter.js",
+      cloudflareEntrypointPath: "/bundled/cloudflare-server.js"
+    }),
     /reauthentication requires an interactive terminal/
   );
 });

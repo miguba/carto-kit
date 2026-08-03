@@ -65,16 +65,6 @@ export async function runDeploy(directory: string, dependencies: DeployDependenc
 
   const env = { ...process.env, NODE_ENV: "production", DEPLOYMENT_TARGET: "cloudflare-workers" };
   const wranglerPath = dependencies.wranglerPath ?? BUNDLED_WRANGLER_PATH;
-  if (dependencies.reauth) {
-    await reauthenticateCloudflare(project.root, wranglerPath, env, interactive);
-  }
-  await ensureCloudflareAuthentication(
-    project.root,
-    wranglerPath,
-    env,
-    interactive,
-    dependencies.selectCloudflareAccount
-  );
   const framework = await resolveFramework(project.root, project.packageJson, config.framework);
   const tempDir = await mkdtemp(resolve(project.root, ".carto-cloudflare-deploy-"));
   try {
@@ -90,6 +80,16 @@ export async function runDeploy(directory: string, dependencies: DeployDependenc
       entrypointPath: dependencies.cloudflareEntrypointPath
     });
     if (build.framework !== framework) throw new Error(`Framework adapter mismatch: expected ${framework}, received ${build.framework}.`);
+    if (dependencies.reauth) {
+      await reauthenticateCloudflare(project.root, wranglerPath, env, interactive);
+    }
+    await ensureCloudflareAuthentication(
+      project.root,
+      wranglerPath,
+      env,
+      interactive,
+      dependencies.selectCloudflareAccount
+    );
     const persistDomainChoice = await selectCustomDomain(config, interactive, dependencies);
     await writeWranglerConfig(wranglerConfigPath, config, workerName, build.entrypointPath, build.outputDirectory);
     console.log(`Deploying ${workerName} to Cloudflare Workers...`);
