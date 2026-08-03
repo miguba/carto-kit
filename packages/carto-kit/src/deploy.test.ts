@@ -188,6 +188,16 @@ test("deploy rejects incompatible project configuration", async () => {
   await assert.rejects(runDeploy(root), /schemaVersion 2/);
 });
 
+test("deploy rejects an unavailable framework adapter explicitly", async () => {
+  const root = await frontsiteFixture();
+  await writeFile(join(root, "carto.config.json"), JSON.stringify({
+    schemaVersion: 1,
+    framework: "nextjs",
+    deployment: { provider: "cloudflare-workers" }
+  }));
+  await assert.rejects(runDeploy(root), /Unsupported framework "nextjs".*Installed adapters: astro/);
+});
+
 test("deploy rejects unsafe custom domain values", async () => {
   const root = await frontsiteFixture();
   await writeFile(join(root, "carto.config.json"), JSON.stringify({

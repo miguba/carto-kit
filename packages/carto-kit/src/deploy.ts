@@ -1,10 +1,10 @@
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, relative, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { confirm, input, select } from "@inquirer/prompts";
 import { runConnect } from "./connect-legacy.js";
+import { INSTALLED_FRAMEWORKS, isFrameworkName, prepareFrameworkCloudflareBuild, resolveFramework } from "./frameworks/index.js";
 import { inspectFrontsiteProject } from "./project.js";
 
 const SCHEMA_VERSION = 1;
@@ -13,6 +13,7 @@ const BUNDLED_WRANGLER_PATH = resolve(dirname(require.resolve("wrangler/package.
 
 interface DeployConfig {
   schemaVersion: number;
+  framework?: string;
   deployment: {
     provider: "cloudflare-workers";
     workerName?: string;
@@ -50,6 +51,9 @@ export async function runDeploy(directory: string, dependencies: DeployDependenc
   await loadEnvironment(project.root);
   const config = await readDeployConfig(project.root);
   const interactive = dependencies.interactive ?? Boolean(process.stdin.isTTY && !process.env.CI);
+  if (dependencies.reconfigureDomain && !interactive) {
+    throw new Error("Custom domain reconfiguration requires an interactive terminal.");
+  }
   const workerName = normalizeWorkerName(config.deployment.workerName || process.env.APP_NAME || project.packageName);
 
   const commerceToken = await ensureCartoConnection(
@@ -58,7 +62,6 @@ export async function runDeploy(directory: string, dependencies: DeployDependenc
     interactive
   );
   requiredEnv("PUBLIC_COMMERCE_API_BASE_URL");
-  await requireProjectCommand(project.root, "astro");
 
   const env = { ...process.env, NODE_ENV: "production", DEPLOYMENT_TARGET: "cloudflare-workers" };
   const wranglerPath = dependencies.wranglerPath ?? BUNDLED_WRANGLER_PATH;
@@ -72,45 +75,42 @@ export async function runDeploy(directory: string, dependencies: DeployDependenc
     interactive,
     dependencies.selectCloudflareAccount
   );
-  const persistDomainChoice = await selectCustomDomain(config, interactive, dependencies);
-  const cloudflare = dependencies.cloudflareAdapterPath && dependencies.cloudflareEntrypointPath
-    ? {
-        adapterPath: dependencies.cloudflareAdapterPath,
-        entrypointPath: dependencies.cloudflareEntrypointPath
-      }
-    : await ensureCloudflareAdapter(project.root, env, dependencies.npmPath ?? npmCommand());
-  const deploymentFiles = await createDeploymentFiles(
-    project.root,
-    config,
-    workerName,
-    cloudflare.adapterPath,
-    cloudflare.entrypointPath
-  );
+  const framework = await resolveFramework(project.root, project.packageJson, config.framework);
+  const tempDir = await mkdtemp(resolve(project.root, ".carto-cloudflare-deploy-"));
   try {
+    const wranglerConfigPath = resolve(tempDir, "wrangler.jsonc");
+    const build = await prepareFrameworkCloudflareBuild(framework, {
+      root: project.root,
+      tempDir,
+      wranglerConfigPath,
+      env,
+      npmPath: dependencies.npmPath ?? npmCommand(),
+      runCommand,
+      adapterPath: dependencies.cloudflareAdapterPath,
+      entrypointPath: dependencies.cloudflareEntrypointPath
+    });
+    if (build.framework !== framework) throw new Error(`Framework adapter mismatch: expected ${framework}, received ${build.framework}.`);
+    const persistDomainChoice = await selectCustomDomain(config, interactive, dependencies);
+    await writeWranglerConfig(wranglerConfigPath, config, workerName, build.entrypointPath, build.outputDirectory);
     console.log(`Deploying ${workerName} to Cloudflare Workers...`);
-    console.log("1/4 Building storefront with the Cloudflare adapter");
-    await runProjectCommand(
-      project.root,
-      "astro",
-      ["build", "--config", relative(project.root, deploymentFiles.astroConfigPath)],
-      env
-    );
+    console.log(`1/4 Building storefront with the ${framework} adapter`);
+    await build.build();
     console.log("2/4 Validating Worker package");
-    await runWrangler(project.root, wranglerPath, ["deploy", "--dry-run", "--config", deploymentFiles.builtWranglerConfigPath], env);
+    await runWrangler(project.root, wranglerPath, ["deploy", "--dry-run", "--config", build.builtWranglerConfigPath], env);
     console.log("3/4 Syncing runtime secrets");
     await runWrangler(
       project.root,
       wranglerPath,
-      ["secret", "bulk", "--config", deploymentFiles.builtWranglerConfigPath],
+      ["secret", "bulk", "--config", build.builtWranglerConfigPath],
       env,
       `${JSON.stringify({ COMMERCE_API_TOKEN: commerceToken })}\n`
     );
     console.log("4/4 Publishing Worker");
-    await runWrangler(project.root, wranglerPath, ["deploy", "--config", deploymentFiles.builtWranglerConfigPath], env);
+    await runWrangler(project.root, wranglerPath, ["deploy", "--config", build.builtWranglerConfigPath], env);
     if (persistDomainChoice) await writeDeployConfig(project.root, config);
     console.log("Cloudflare deployment completed.");
   } finally {
-    await rm(deploymentFiles.tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   }
 }
 
@@ -118,6 +118,9 @@ export function printDeployHelp(): void {
   console.log(`carto deploy
 
 Deploy a Carto Frontsite project to Cloudflare Workers.
+
+The project framework is selected through carto.config.json. Existing Astro
+projects are detected automatically for backward compatibility.
 
 Usage:
   carto deploy [project-directory] [--reauth] [--reconfigure-domain]
@@ -274,6 +277,9 @@ async function readDeployConfig(root: string): Promise<DeployConfig> {
     if (parsed.deployment?.provider !== "cloudflare-workers") {
       throw new Error(`Unsupported deployment provider "${String(parsed.deployment?.provider)}".`);
     }
+    if (parsed.framework !== undefined && (typeof parsed.framework !== "string" || !isFrameworkName(parsed.framework))) {
+      throw new Error(`Unsupported framework "${String(parsed.framework)}". Installed adapters: ${INSTALLED_FRAMEWORKS.join(", ")}.`);
+    }
     if (parsed.deployment.customDomain !== undefined && parsed.deployment.customDomain !== null) {
       if (typeof parsed.deployment.customDomain !== "string") {
         throw new Error("deployment.customDomain must be a hostname or null.");
@@ -317,64 +323,6 @@ async function writeDeployConfig(root: string, config: DeployConfig): Promise<vo
   await writeFile(resolve(root, "carto.config.json"), `${JSON.stringify(config, null, 2)}\n`);
 }
 
-async function ensureCloudflareAdapter(
-  root: string,
-  env: NodeJS.ProcessEnv,
-  npmPath: string
-): Promise<{ adapterPath: string; entrypointPath: string }> {
-  const astroVersion = await readInstalledPackageVersion(root, "astro");
-  if (!astroVersion) throw new Error("Missing astro. Install the Frontsite project dependencies first.");
-  const astroMajor = Number.parseInt(astroVersion.split(".")[0], 10);
-  const compatibleAdapter = astroMajor === 6 ? { major: 13, version: "^13.7.0" }
-    : astroMajor === 7 ? { major: 14, version: "^14.1.7" }
-    : undefined;
-  if (!compatibleAdapter) {
-    throw new Error(`Unsupported Astro version ${astroVersion}. Carto deploy currently supports Astro 6 and 7.`);
-  }
-
-  let adapterVersion = await readInstalledPackageVersion(root, "@astrojs/cloudflare", false);
-  if (!adapterVersion || Number.parseInt(adapterVersion.split(".")[0], 10) !== compatibleAdapter.major) {
-    console.log(`Preparing @astrojs/cloudflare for Astro ${astroMajor}...`);
-    await runCommand(root, npmPath, [
-      "install",
-      "--save-dev",
-      "--include=dev",
-      "--no-audit",
-      "--no-fund",
-      `@astrojs/cloudflare@${compatibleAdapter.version}`
-    ], env, undefined, "npm");
-    adapterVersion = await readInstalledPackageVersion(root, "@astrojs/cloudflare", false);
-    if (!adapterVersion) {
-      await runCommand(root, npmPath, ["install", "--include=dev", "--no-audit", "--no-fund"], env, undefined, "npm");
-      adapterVersion = await readInstalledPackageVersion(root, "@astrojs/cloudflare", false);
-    }
-  }
-  if (!adapterVersion || Number.parseInt(adapterVersion.split(".")[0], 10) !== compatibleAdapter.major) {
-    throw new Error(`Unable to prepare a Cloudflare adapter compatible with Astro ${astroVersion}.`);
-  }
-
-  const projectRequire = createRequire(resolve(root, "package.json"));
-  return {
-    adapterPath: projectRequire.resolve("@astrojs/cloudflare"),
-    entrypointPath: projectRequire.resolve("@astrojs/cloudflare/entrypoints/server")
-  };
-}
-
-async function readInstalledPackageVersion(root: string, name: string, required = true): Promise<string | undefined> {
-  try {
-    const contents = await readFile(resolve(root, "node_modules", ...name.split("/"), "package.json"), "utf8");
-    const version = (JSON.parse(contents) as { version?: unknown }).version;
-    if (typeof version !== "string" || !version) throw new Error(`Invalid installed package metadata for ${name}.`);
-    return version;
-  } catch (error) {
-    if (!required && (error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new Error(`Missing ${name}. Install the Frontsite project dependencies first.`);
-    }
-    throw error;
-  }
-}
-
 async function loadEnvironment(root: string, overwrite: ReadonlySet<string> = new Set()): Promise<void> {
   const inherited = new Set(Object.keys(process.env));
   for (const filename of [".env", ".env.production"]) {
@@ -399,41 +347,21 @@ function parseEnvValue(raw: string): string {
   return comment >= 0 ? value.slice(0, comment).trim() : value;
 }
 
-async function createDeploymentFiles(
-  root: string,
+async function writeWranglerConfig(
+  wranglerConfigPath: string,
   config: DeployConfig,
   workerName: string,
-  cloudflareAdapterPath: string,
-  cloudflareEntrypointPath: string
-): Promise<{ tempDir: string; astroConfigPath: string; wranglerConfigPath: string; builtWranglerConfigPath: string }> {
-  const tempDir = await mkdtemp(resolve(root, ".carto-cloudflare-deploy-"));
-  const astroConfigPath = resolve(tempDir, "astro.config.mjs");
-  const wranglerConfigPath = resolve(tempDir, "wrangler.jsonc");
-  const originalConfigUrl = pathToFileURL(resolve(root, "astro.config.mjs")).href;
-  const adapterUrl = pathToFileURL(cloudflareAdapterPath).href;
-  await writeFile(astroConfigPath, [
-    `import cloudflare from ${JSON.stringify(adapterUrl)};`,
-    `import originalConfig from ${JSON.stringify(originalConfigUrl)};`,
-    "const base = typeof originalConfig === 'function'",
-    "  ? await originalConfig({ command: 'build', mode: 'production' })",
-    "  : await originalConfig;",
-    "export default {",
-    "  ...base,",
-    `  root: ${JSON.stringify(root)},`,
-    "  output: 'server',",
-    `  adapter: cloudflare({ configPath: ${JSON.stringify(wranglerConfigPath)}, imageService: 'passthrough', prerenderEnvironment: 'node' }),`,
-    "};",
-    ""
-  ].join("\n"));
-
+  entrypointPath: string,
+  outputDirectory: string
+): Promise<void> {
   const wrangler: Record<string, unknown> = {
     name: workerName,
-    main: cloudflareEntrypointPath,
+    main: entrypointPath,
     compatibility_date: config.deployment.compatibilityDate || "2025-04-01",
     compatibility_flags: ["nodejs_compat"],
     workers_dev: true,
     preview_urls: true,
-    assets: { binding: "ASSETS", directory: resolve(root, "dist") },
+    assets: { binding: "ASSETS", directory: outputDirectory },
     observability: { enabled: true }
   };
   if (config.deployment.customDomain) {
@@ -460,12 +388,6 @@ async function createDeploymentFiles(
     wrangler.kv_namespaces = [{ binding: "SESSION" }];
   }
   await writeFile(wranglerConfigPath, `${JSON.stringify(wrangler, null, 2)}\n`);
-  return {
-    tempDir,
-    astroConfigPath,
-    wranglerConfigPath,
-    builtWranglerConfigPath: resolve(root, "dist", "server", "wrangler.json")
-  };
 }
 
 function requiredEnv(name: string): string {
@@ -496,19 +418,6 @@ function normalizeCustomDomain(value: string): string {
     throw new Error("The custom domain contains an invalid DNS label.");
   }
   return hostname;
-}
-
-async function requireProjectCommand(root: string, command: string): Promise<void> {
-  try { await access(commandPath(root, command)); }
-  catch { throw new Error(`Missing ${command}. Install the Frontsite project dependencies first.`); }
-}
-
-function commandPath(root: string, command: string): string {
-  return resolve(root, "node_modules", ".bin", process.platform === "win32" ? `${command}.cmd` : command);
-}
-
-async function runProjectCommand(root: string, command: string, args: string[], env: NodeJS.ProcessEnv, stdin?: string): Promise<void> {
-  await runCommand(root, commandPath(root, command), args, env, stdin, command);
 }
 
 function npmCommand(): string {

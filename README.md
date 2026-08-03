@@ -1,6 +1,6 @@
 # Carto
 
-Command-line tools for connecting Carto Frontsite projects.
+Framework-independent command-line tools for connecting, validating, and deploying Carto Frontsite projects.
 
 ## Packages
 
@@ -60,6 +60,28 @@ From an existing Carto Frontsite project:
 ```bash
 npx carto-kit@latest deploy
 ```
+
+Core commands (`connect`, `contract pull`, `frontsite doctor`, and `frontsite
+verify`) do not require Astro or any other frontend framework. Deployment uses a
+framework adapter selected by `carto.config.json`:
+
+```json
+{
+  "schemaVersion": 1,
+  "framework": "astro",
+  "deployment": {
+    "provider": "cloudflare-workers"
+  }
+}
+```
+
+The built-in `astro` adapter supports Astro 6 and 7 with Cloudflare Workers.
+Existing Astro Frontsites without an explicit `framework` field continue to be
+detected automatically. New projects should declare the framework explicitly.
+
+Framework-specific detection, dependency preparation, and build configuration
+live behind the adapter registry; Carto authentication, contracts, diagnostics,
+and verification remain framework-independent.
 
 ## Publishing
 
