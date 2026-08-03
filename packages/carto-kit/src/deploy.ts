@@ -4,7 +4,7 @@ import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { confirm, input, select } from "@inquirer/prompts";
-import { runConnect } from "./connect.js";
+import { runConnect } from "./connect-legacy.js";
 import { inspectFrontsiteProject } from "./project.js";
 
 const SCHEMA_VERSION = 1;

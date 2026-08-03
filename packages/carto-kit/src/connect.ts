@@ -1,73 +1,139 @@
 import { spawn } from "node:child_process";
-import { writeFile } from "node:fs/promises";
-import { input, confirm } from "@inquirer/prompts";
-import kleur from "kleur";
-import type { ParsedCommand } from "./cli-args.js";
-import { beginDeviceAuthorization, pollDeviceAuthorization, verifyCommerceApi } from "./auth.js";
-import { addEnvToGitignore, gitignoreCoversEnv, mergeEnv, readOptional, writeEnv } from "./env-file.js";
-import { inspectFrontsiteProject } from "./project.js";
-import { normalizeHttpBaseUrl, validateHttpBaseUrl } from "./validators.js";
+import { CartoError } from "./errors.js";
+import type { CommandOutput } from "./output.js";
+import { hasPrivateToken, savePrivateToken } from "./secrets.js";
 
-type ConnectCommand = Extract<ParsedCommand, { command: "connect" }>;
+interface DeviceStart {
+  deviceCode: string;
+  userCode: string;
+  verificationUri: string;
+  verificationUriComplete?: string;
+  expiresIn: number;
+  interval: number;
+}
 
-export async function runConnect(options: ConnectCommand): Promise<void> {
-  const project = await inspectFrontsiteProject(options.projectDir);
-  const cartoUrl = normalizeHttpBaseUrl(options.cartoUrl ?? await input({
-    message: "Carto Private URL",
-    validate: validateHttpBaseUrl
-  }));
-  const validation = validateHttpBaseUrl(cartoUrl);
-  if (validation !== true) throw new Error(validation);
+type PollResult =
+  | { status: "pending" | "slow_down" }
+  | { status: "approved"; token: string }
+  | { status: "denied" | "expired" };
 
-  console.log(`Connecting ${kleur.bold(project.packageName)} to ${cartoUrl}`);
-  const authorization = await beginDeviceAuthorization(cartoUrl, project.packageName);
-  console.log(`Open ${authorization.verificationUri}`);
-  console.log(`Enter code: ${kleur.bold(authorization.userCode)}`);
-  if (options.openBrowser) openBrowser(authorization.verificationUri);
-  const credential = await pollDeviceAuthorization(cartoUrl, authorization);
+export interface ConnectOptions {
+  reauth?: boolean;
+  timeoutSeconds?: number;
+  noBrowser?: boolean;
+  signal?: AbortSignal;
+  apiUrl?: string;
+  fetch?: typeof globalThis.fetch;
+  openBrowser?: (url: string) => Promise<void>;
+  output: CommandOutput;
+}
 
-  const currentEnv = await readOptional(project.envPath);
-  let merged = mergeEnv(currentEnv, {
-    PUBLIC_COMMERCE_API_BASE_URL: credential.apiBaseUrl.replace(/\/+$/, ""),
-    COMMERCE_API_TOKEN: credential.token
-  });
-  if (merged.conflicts.length > 0) {
-    if (options.yes) throw new Error(`Existing .env values were not changed: ${merged.conflicts.join(", ")}. Run interactively to confirm replacement.`);
-    const approved = await confirm({ message: `Replace existing ${merged.conflicts.join(" and ")} in .env?`, default: false });
-    if (!approved) throw new Error("Existing .env values were left unchanged.");
-    merged = mergeEnv(currentEnv, {
-      PUBLIC_COMMERCE_API_BASE_URL: credential.apiBaseUrl.replace(/\/+$/, ""), COMMERCE_API_TOKEN: credential.token
-    }, new Set(merged.conflicts));
+export async function connectPrivate(projectDir: string, options: ConnectOptions): Promise<Record<string, unknown>> {
+  if (!options.reauth && await hasPrivateToken(projectDir)) {
+    return { status: "connected", changed: false, credential: "stored" };
+  }
+  if (!process.stdin.isTTY && !options.output.json && !options.noBrowser) {
+    throw new CartoError("NO_TTY", "A non-interactive session must use --no-browser or --json.");
+  }
+  const apiUrl = options.apiUrl ?? process.env.CARTO_PRIVATE_API_URL;
+  if (!apiUrl) throw new CartoError("CONFIG_INVALID", "CARTO_PRIVATE_API_URL is required until Carto Private publishes its production endpoint.");
+  const fetcher = options.fetch ?? globalThis.fetch;
+  const start = await request<DeviceStart>(fetcher, new URL("/api/cli/device-authorizations", apiUrl), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  }, options.signal);
+  validateStart(start);
+  const verificationUrl = start.verificationUriComplete ?? start.verificationUri;
+  options.output.diagnostic(`Open ${verificationUrl} and enter code ${start.userCode}.`);
+  if (!options.noBrowser) {
+    try { await (options.openBrowser ?? openBrowser)(verificationUrl); }
+    catch { options.output.diagnostic("The browser could not be opened automatically; use the URL above."); }
   }
 
-  const ignore = await readOptional(project.gitignorePath);
-  if (!gitignoreCoversEnv(ignore)) await writeFile(project.gitignorePath, addEnvToGitignore(ignore));
-  await writeEnv(project.envPath, merged.contents);
-  await verifyCommerceApi(credential.apiBaseUrl, credential.token);
-  console.log(kleur.green("Carto connection completed."));
-  console.log(`Site: ${credential.site}`);
-  console.log(`Server App: ${credential.serverApp.name} (${credential.serverApp.scopes.join(", ")})`);
-  console.log("Credentials were written to .env with restricted permissions and were not printed.");
+  const serviceDeadline = Date.now() + start.expiresIn * 1000;
+  const userDeadline = Date.now() + (options.timeoutSeconds ?? start.expiresIn) * 1000;
+  const effectiveDeadline = Math.min(serviceDeadline, userDeadline);
+  const deadlineController = new AbortController();
+  const deadlineTimer = setTimeout(() => deadlineController.abort(), Math.max(0, effectiveDeadline - Date.now()));
+  const flowSignal = options.signal
+    ? AbortSignal.any([options.signal, deadlineController.signal])
+    : deadlineController.signal;
+  let interval = Math.max(1, start.interval) * 1000;
+  try {
+    while (Date.now() < effectiveDeadline) {
+      await delay(Math.min(interval, Math.max(1, effectiveDeadline - Date.now())), flowSignal);
+      const result = await request<PollResult>(fetcher, new URL("/api/cli/device-authorizations/token", apiUrl), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deviceCode: start.deviceCode })
+      }, flowSignal);
+      if (result.status === "approved") {
+        if (!result.token) throw new CartoError("SERVICE_ERROR", "Carto Private returned an invalid authorization response.");
+        await savePrivateToken(projectDir, result.token);
+        return { status: "connected", changed: true, credential: "stored" };
+      }
+      if (result.status === "denied") throw new CartoError("AUTH_CANCELLED", "Authorization was cancelled.");
+      if (result.status === "expired") throw new CartoError("AUTH_EXPIRED", "Authorization expired; run carto connect again.");
+      if (result.status === "slow_down") interval += 1000;
+    }
+  } catch (error) {
+    if (!deadlineController.signal.aborted) throw error;
+  } finally {
+    clearTimeout(deadlineTimer);
+  }
+  if (Date.now() >= serviceDeadline) throw new CartoError("AUTH_EXPIRED", "Authorization expired; run carto connect again.");
+  throw new CartoError("AUTH_TIMEOUT", "Authorization timed out; run carto connect again.", { retryable: true });
 }
 
-export function printConnectHelp(): void {
-  console.log(`carto connect [project-directory]
-
-Securely connect a Carto Frontsite project to Carto Private.
-
-Options:
-  --carto-url <url>  Carto Private origin (not a Commerce API token)
-  --no-open          Do not open the verification page automatically
-  -y, --yes          Non-interactive mode; refuses to replace existing values
-  -h, --help         Show this help
-
-Tokens are never accepted as command-line arguments.`);
+async function request<T>(fetcher: typeof globalThis.fetch, url: URL, init: RequestInit, signal?: AbortSignal): Promise<T> {
+  let response: Response;
+  try { response = await fetcher(url, { ...init, signal }); }
+  catch (error) {
+    if (signal?.aborted) throw new CartoError("AUTH_CANCELLED", "Authorization was cancelled.");
+    throw new CartoError("NETWORK_ERROR", "Could not reach Carto Private.", { retryable: true, cause: error });
+  }
+  if (!response.ok) {
+    const requestId = response.headers.get("x-request-id");
+    throw new CartoError("SERVICE_ERROR", `Carto Private returned HTTP ${response.status}.`, {
+      retryable: response.status === 429 || response.status >= 500,
+      details: requestId ? { requestId } : undefined
+    });
+  }
+  try { return await response.json() as T; }
+  catch (error) { throw new CartoError("SERVICE_ERROR", "Carto Private returned an invalid response.", { cause: error }); }
 }
 
-function openBrowser(url: string): void {
-  const command = process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
-  const args = process.platform === "win32" ? ["/c", "start", "", url] : [url];
-  const child = spawn(command, args, { detached: true, stdio: "ignore" });
-  child.on("error", () => undefined);
-  child.unref();
+function validateStart(value: DeviceStart): void {
+  if (!value.deviceCode || !value.userCode || !value.verificationUri || !Number.isFinite(value.expiresIn) || !Number.isFinite(value.interval)) {
+    throw new CartoError("SERVICE_ERROR", "Carto Private returned an invalid authorization response.");
+  }
+}
+
+function delay(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new CartoError("AUTH_CANCELLED", "Authorization was cancelled."));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, milliseconds);
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+async function openBrowser(url: string): Promise<void> {
+  const [command, args] = process.platform === "darwin"
+    ? ["open", [url]]
+    : process.platform === "win32"
+      ? ["cmd", ["/c", "start", "", url]]
+      : ["xdg-open", [url]];
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, { stdio: "ignore", detached: true });
+    child.once("error", reject);
+    child.once("spawn", () => { child.unref(); resolve(); });
+  });
 }

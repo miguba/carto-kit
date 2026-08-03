@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractVersion": "2026.8.0",
+  "bundle": {
+    "fixture": true,
+    "verification": { "requirements": [] }
+  },
+  "additiveField": "accepted"
+}
